@@ -1,0 +1,153 @@
+import React, { useEffect, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from "react-native";
+import { graphqlRequest } from "@/services/api";
+import { useRoute, useNavigation } from "@react-navigation/native";
+
+export default function AdminEstimation() {
+  const route = useRoute();
+  const { requestId } = route.params || {};   
+  const [estimation, setEstimation] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const navigation = useNavigation();
+
+  useEffect(() => {
+    if (requestId) fetchEstimation();
+  }, [requestId]);
+
+  const fetchEstimation = async () => {
+    const query = `
+      query($id: ID!) {
+        adminEstimation(requestId: $id) {
+          id
+          total
+          approved
+          repairRequest {
+            itemName
+            problemDescription
+            status
+          }
+          items {
+            id
+            description
+            unitPrice
+            quantity
+            amount
+          }
+        }
+      }
+    `;
+
+    try {
+      const response = await graphqlRequest(query, { id: requestId });
+      console.log("Admin estimation:", response);
+
+      setEstimation(response?.adminEstimation || null);
+    } catch (err) {
+      console.log("Error fetching estimation:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return <ActivityIndicator size="large" style={{ marginTop: 50 }} />;
+  }
+
+  if (!estimation) {
+    return (
+      <View style={styles.errorBox}>
+        <Text>No estimation found</Text>
+      </View>
+    );
+  }
+
+  const request = estimation.repairRequest;
+
+  return (
+    <ScrollView style={styles.container}>
+      <View style={styles.card}>
+        <Text style={styles.title}>{request.itemName}</Text>
+
+        <Text style={styles.label}>
+          Problem: <Text style={styles.value}>{request.problemDescription}</Text>
+        </Text>
+
+        <Text style={styles.label}>
+          Status: <Text style={styles.status}>{request.status}</Text>
+        </Text>
+
+        <Text style={styles.sectionTitle}>Estimation</Text>
+        <View style={styles.line} />
+
+        {estimation.items.map((item) => (
+          <View key={item.id} style={styles.row}>
+            <Text style={styles.itemName}>{item.description}</Text>
+            <Text style={styles.amount}>₹{item.amount}</Text>
+          </View>
+        ))}
+
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Total:</Text>
+          <Text style={styles.totalAmount}>₹{estimation.total}</Text>
+          <TouchableOpacity
+            style={{
+              backgroundColor: "blue",
+              padding: 10,
+              marginTop: 10,
+              borderRadius: 8,
+            }}
+            onPress={() => {
+              const repairData = {
+                requestId: requestId,
+                title: request.itemName,
+                problem: request.problemDescription,
+                status: request.status,
+                items: estimation.items.map((i) => ({
+                  description: i.description,
+                  amount: i.amount,
+                })),
+                total: estimation.total,
+              };
+              navigation.navigate("UpdateStatus", { repair: repairData });
+            }}
+          >
+            <Text style={{ color: "white", textAlign: "center" }}>
+              Update Status
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { padding: 20 },
+  card: {
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 12,
+    elevation: 4,
+  },
+  title: { fontSize: 22, fontWeight: "bold", marginBottom: 10 },
+  label: { fontSize: 16, marginTop: 4 },
+  value: { fontWeight: "600" },
+  status: { fontWeight: "bold", color: "orange" },
+  sectionTitle: { marginTop: 20, fontSize: 18, fontWeight: "bold" },
+  line: { height: 1, backgroundColor: "#ccc", marginVertical: 10 },
+  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8 },
+  itemName: { fontSize: 16 },
+  amount: { fontSize: 16, fontWeight: "600" },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 15,
+    borderTopWidth: 1,
+    paddingTop: 10,
+    borderColor: "#ccc",
+  },
+  totalLabel: { fontSize: 18, fontWeight: "bold" },
+  totalAmount: { fontSize: 18, fontWeight: "bold" },
+  errorBox: { marginTop: 50, alignItems: "center" },
+  statusButtonText: { color: "white", fontSize: 17, fontWeight: "600" },
+});
