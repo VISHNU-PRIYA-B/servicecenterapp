@@ -1,0 +1,270 @@
+import React, { useEffect, useState, useContext, useLayoutEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
+import { graphqlRequest, setAuthToken } from "../services/api";
+import { UserContext } from "../components/ui/UserContext";
+import { useLogout } from "../hooks/Logout";
+import { useNavigation } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+export default function ApproveEstimation() {
+  const { token: contextToken, user } = useContext(UserContext);
+  const [estimations, setEstimations] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const logout = useLogout();
+  const navigation = useNavigation();
+
+  // --- DEBUG: log the user object ---
+  console.log("Current user object:", user);
+
+  // Adjust this depending on your backend user object
+  const isCustomer = user?.customer === true || user?.role === "CUSTOMER";
+
+  // Add Logout button in header
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity onPress={logout} style={{ marginRight: 15 }}>
+          <Text style={{ color: "red", fontWeight: "bold" }}>Logout</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]);
+
+  // Fetch estimations
+  const fetchMyEstimations = async () => {
+    let tokenToUse = contextToken;
+    if (!tokenToUse) {
+      tokenToUse = await AsyncStorage.getItem("token");
+    }
+    if (!tokenToUse) {
+      Alert.alert("Error", "You are not logged in.");
+      return;
+    }
+
+    setAuthToken(tokenToUse);
+    setLoading(true);
+
+    const query = `
+      query {
+        myEstimations {
+          id
+          total
+          approved
+          repairRequest {
+            requestId
+            itemName
+            problemDescription
+            status
+          }
+          items {
+            id
+            description
+            quantity
+            unitPrice
+            amount
+          }
+        }
+      }
+    `;
+
+    try {
+      const response = await graphqlRequest(query, {}, tokenToUse);
+      const data = response?.data?.myEstimations || response?.myEstimations || [];
+      setEstimations(data);
+    } catch (err: any) {
+      console.error("Fetch error:", err);
+      Alert.alert("Error", "Failed to fetch your estimations.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMyEstimations();
+  }, []);
+
+  // Approve handler
+  const handleApprove = async (requestId: string) => {
+    if (!requestId) return;
+    try {
+      const mutation = `
+        mutation {
+          approveEstimation(requestId: "${requestId}", approved: true) {
+            success
+            message
+          }
+        }
+      `;
+      const response = await graphqlRequest(mutation);
+      if (response?.data?.approveEstimation?.success) {
+        Alert.alert("Success", "Approved successfully.");
+        fetchMyEstimations();
+      } else {
+        Alert.alert("Error", response?.data?.approveEstimation?.message || "Could not approve.");
+      }
+    } catch (err) {
+      console.log("Approve error", err);
+      Alert.alert("Error", "Could not approve estimation.");
+    }
+  };
+
+  // Reject handler
+  const handleReject = async (requestId: string) => {
+    if (!requestId) return;
+    try {
+      const mutation = `
+        mutation {
+          approveEstimation(requestId: "${requestId}", approved: false) {
+            success
+            message
+          }
+        }
+      `;
+      const response = await graphqlRequest(mutation);
+      if (response?.data?.approveEstimation?.success) {
+        Alert.alert("Rejected", "Estimation rejected successfully.");
+        fetchMyEstimations();
+      } else {
+        Alert.alert("Error", response?.data?.approveEstimation?.message || "Could not reject.");
+      }
+    } catch (err) {
+      console.log("Reject error", err);
+      Alert.alert("Error", "Failed to reject estimation.");
+    }
+  };
+
+  // Loading view
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={{ marginTop: 10 }}>Loading estimations...</Text>
+      </View>
+    );
+  }
+
+  // Empty view
+  if (!estimations || estimations.length === 0) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.emptyText}>No estimations found.</Text>
+      </View>
+    );
+  }
+
+  // Card Renderer
+  const renderItem = ({ item }: any) => {
+    const total =
+      item.items?.reduce((sum: number, i: any) => sum + Number(i.amount || 0), 0) ||
+      Number(item.total) ||
+      0;
+
+    const requestId = item.repairRequest?.requestId;
+    const status = item.repairRequest?.status?.toLowerCase();
+
+    // --- DEBUG: log each repair request ---
+    console.log("Repair request:", item.repairRequest, "Status:", status);
+
+    const showButtons = requestId && status === "pending";
+
+    return (
+      <View style={styles.card}>
+        <Text style={styles.heading}>{item.repairRequest?.itemName || "No Item Name"}</Text>
+        <Text style={styles.label}>
+          Problem: <Text style={styles.value}>{item.repairRequest?.problemDescription || "N/A"}</Text>
+        </Text>
+        <Text style={styles.label}>
+          Status: <Text style={styles.value}>{item.repairRequest?.status || "N/A"}</Text>
+        </Text>
+
+        <Text style={styles.subHeading}>Estimation</Text>
+        <View style={styles.separator} />
+
+        {item.items?.length ? (
+          item.items.map((i: any) => (
+            <View style={styles.row} key={i.id}>
+              <Text style={styles.descText}>{i.description}</Text>
+              <Text style={styles.amountText}>₹{i.amount}</Text>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.noItems}>No items in this estimation</Text>
+        )}
+
+        <View style={styles.row}>
+          <Text style={styles.totalLabel}>Total:</Text>
+          <Text style={styles.totalValue}>₹{total.toFixed(2)}</Text>
+        </View>
+
+        {showButtons && (
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity style={styles.acceptButton} onPress={() => handleApprove(requestId)}>
+              <Text style={styles.buttonText}>Accept</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.rejectButton} onPress={() => handleReject(requestId)}>
+              <Text style={styles.buttonText}>Reject</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  return (
+    <FlatList
+      data={estimations}
+      keyExtractor={(item, index) => String(item?.id ?? index)}
+      renderItem={renderItem}
+      contentContainerStyle={{ padding: 20 }}
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  card: {
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 15,
+    elevation: 3,
+  },
+  heading: { fontSize: 18, fontWeight: "bold", color: "#000", marginBottom: 5 },
+  label: { fontSize: 14, color: "#555", marginBottom: 2 },
+  value: { color: "#000", fontWeight: "500" },
+  subHeading: { fontSize: 16, fontWeight: "600", marginTop: 10 },
+  separator: { height: 1, backgroundColor: "#ddd", marginVertical: 5 },
+  row: { flexDirection: "row", justifyContent: "space-between", marginVertical: 3 },
+  descText: { fontSize: 14, color: "#333" },
+  amountText: { fontSize: 14, color: "#000", fontWeight: "500" },
+  totalLabel: { fontSize: 15, fontWeight: "600", marginTop: 5 },
+  totalValue: { fontSize: 15, fontWeight: "bold", color: "#000", marginTop: 5 },
+  buttonContainer: { flexDirection: "row", justifyContent: "space-between", marginTop: 15 },
+  acceptButton: {
+    backgroundColor: "#27AE60",
+    flex: 1,
+    marginRight: 10,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  rejectButton: {
+    backgroundColor: "#E74C3C",
+    flex: 1,
+    marginLeft: 10,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  buttonText: { color: "#fff", fontWeight: "600", fontSize: 15 },
+  noItems: { fontStyle: "italic", color: "#888", marginVertical: 5 },
+  emptyText: { textAlign: "center", marginTop: 50, fontSize: 16, color: "#888" },
+});
