@@ -1,0 +1,280 @@
+import React, { useContext, useState } from "react";
+import {View,Text,TouchableOpacity,Modal,StyleSheet,ScrollView,ActivityIndicator,} from "react-native";
+import { graphqlRequest } from "../services/api";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { UserContext } from "../components/ui/UserContext";
+
+
+const STATUS_FLOW = [
+  "PENDING",
+  "STARTED",
+  "REPAIRING",
+  "TESTING",
+  "READY_TO_DELIVER",
+];
+
+export default function UpdateStatus() {
+  const route = useRoute();
+  const { repair } = route.params || {};
+  const {user} = useContext(UserContext);
+
+  if (!repair) {
+    return (
+      <View style={styles.center}>
+        <Text>No repair data provided!</Text>
+      </View>
+    );
+  }
+
+  const [status, setStatus] = useState(repair.status || "PENDING");
+  const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const navigation = useNavigation();
+
+  const getStatusIndex = (st) => STATUS_FLOW.indexOf(st);
+
+  const updateStatus = async (newStatus) => {
+    setLoading(true);
+
+    const UPDATE_STATUS_MUTATION = `
+      mutation UpdateRepairStatus($request_id:String!, $update_status:String!){
+        updateRepairStatus(requestId:$request_id, updateStatus:$update_status){
+          success
+          message
+          status
+        }
+      }`;
+
+    try {
+      const response = await graphqlRequest(UPDATE_STATUS_MUTATION, {
+        request_id: repair.requestId,
+        update_status: newStatus,
+      });
+
+      const updated = response?.data?.updateRepairStatus?.status;
+      if (updated){
+        setStatus(updated);
+        repair.status = updated;
+      } 
+
+      setShowModal(false);
+    } catch (err) {
+      console.log(err);
+      alert("Failed to update status");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const totalAmount = (repair.items || []).reduce((sum, item) => {
+  return sum + Number(item.amount || 0);
+}, 0);
+
+  return (
+    <ScrollView style={styles.container}>
+      {/* TITLE */}
+      <Text style={styles.title}>{repair.title || "N/A"}</Text>
+
+      {/* PROBLEM */}
+      <Text style={styles.problem}>
+        <Text style={{ fontWeight: "bold" }}>Problem: </Text>
+        {repair.problem || "N/A"}
+      </Text>
+
+      {/* STATUS PROGRESS BAR */}
+      <View style={{ marginTop: 20 }}>
+        <Text style={styles.sectionTitle}>Status</Text>
+
+        {/* Progress Bar */}
+        <View style={styles.progressBackground}>
+          <View
+            style={[
+              styles.progressFill,
+              {
+                width:
+                  ((getStatusIndex(status) + 1) / STATUS_FLOW.length) * 100 +
+                  "%",
+              },
+            ]}
+          />
+        </View>
+
+        {/* Status labels */}
+        <View style={styles.statusRow}>
+          {STATUS_FLOW.map((s, i) => (
+            <Text
+              key={i}
+              style={[
+                styles.statusLabel,
+                getStatusIndex(status) === i && styles.activeStatusLabel,
+              ]}
+            >
+              {s.replace("_", " ")}
+            </Text>
+          ))}
+        </View>
+      </View>
+
+      {/* ESTIMATION */}
+      <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Estimation</Text>
+
+      {(repair.items || []).map((item, idx) => (
+        <View key={idx} style={styles.row}>
+          <Text>{item.description || "-"}</Text>
+          <Text>₹{Number(item.amount ?? 0).toFixed(2)}</Text>
+        </View>
+      ))}
+
+      {/* TOTAL */}
+      <View style={styles.totalRow}>
+        <Text style={styles.totalText}>Total:</Text>
+        <Text style={styles.totalText}>
+          ₹{totalAmount.toFixed(2)}
+        </Text>
+      </View>
+
+      <TouchableOpacity
+        style={styles.updateButton}
+        onPress={() => setShowModal(true)}
+      >
+        <Text style={styles.updateButtonText}>Update Status</Text>
+      </TouchableOpacity>
+      {status === "READY_TO_DELIVER" && (
+  <TouchableOpacity
+    style={[styles.updateButton, { backgroundColor: "green", marginTop: 10 }]}
+    onPress={() => {
+      navigation.navigate("Invoice", { requestId: repair.requestId });
+    }}
+  >
+    <Text style={styles.updateButtonText}>Invoice</Text>
+  </TouchableOpacity>
+)}
+
+
+
+      {/* STATUS MODAL */}
+      <Modal visible={showModal} transparent animationType="slide">
+        <View style={styles.modalBackground}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Update Status</Text>
+
+            {loading && <ActivityIndicator size="large" color="blue" />}
+
+            {!loading &&
+              STATUS_FLOW.map((s) => (
+                <TouchableOpacity
+                  key={s}
+                  style={styles.modalOption}
+                  onPress={() => updateStatus(s)}
+                >
+                  <Text style={{ fontSize: 16 }}>{s.replace("_", " ")}</Text>
+                </TouchableOpacity>
+              ))}
+
+            <TouchableOpacity
+              onPress={() => setShowModal(false)}
+              style={styles.cancelButton}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { padding: 16, backgroundColor: "#fff" },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  title: { fontSize: 22, fontWeight: "bold", marginBottom: 10 },
+  problem: { fontSize: 16, marginBottom: 6 },
+
+  sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 8 },
+
+  /* Progress bar background */
+  progressBackground: {
+    height: 4,
+    backgroundColor: "#ccc",
+    borderRadius: 5,
+  },
+
+  /* Green progress bar */
+  progressFill: {
+    height: 4,
+    backgroundColor: "green",
+    borderRadius: 5,
+  },
+
+  statusRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 6,
+  },
+
+  statusLabel: {
+    fontSize: 12,
+    color: "gray",
+  },
+
+  activeStatusLabel: {
+    fontWeight: "bold",
+    color: "green",
+  },
+
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 6,
+    borderBottomWidth: 0.5,
+    borderColor: "#ddd",
+  },
+
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 12,
+  },
+
+  totalText: { fontSize: 18, fontWeight: "bold" },
+
+  updateButton: {
+    backgroundColor: "#1E40AF",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+
+  updateButtonText: { color: "#fff", fontWeight: "bold", textAlign: "center" },
+
+  modalBackground: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+
+  modalBox: {
+    backgroundColor: "#fff",
+    padding: 20,
+    borderTopRightRadius: 12,
+    borderTopLeftRadius: 12,
+  },
+
+  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 16 },
+
+  modalOption: {
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderColor: "#ddd",
+  },
+
+  cancelButton: {
+    marginTop: 16,
+    backgroundColor: "red",
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+
+  cancelText: { textAlign: "center", color: "#fff", fontWeight: "bold" },
+});
