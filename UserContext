@@ -1,0 +1,84 @@
+// components/ui/UserContext.tsx
+import React, { createContext, useState, useEffect, ReactNode } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { graphqlRequest, setAuthToken } from "@/services/api";
+
+interface UserContextType {
+  token: string | null;
+  user: any;
+  login: (token: string, user: any) => Promise<void>;
+  logout: () => Promise<void>;
+}
+
+interface UserProviderProps {
+  children: ReactNode;
+}
+
+export const UserContext = createContext<UserContextType>({
+  token: null,
+  user: null,
+  login: async () => {},
+  logout: async () => {},
+});
+
+export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadTokenAndUser = async () => {
+      try {
+        const savedToken = await AsyncStorage.getItem("token");
+        if (savedToken) {
+          setToken(savedToken);
+          setAuthToken(savedToken);
+
+          // Fetch current user
+          const response = await graphqlRequest(
+            `{ currentUser { id email role customer admin } }`,
+            {},
+            savedToken
+          );
+
+          if (response?.currentUser) {
+            setUser(response.currentUser); // ✅ Correct
+            console.log("Current user object:", response.currentUser);
+          } else {
+            setUser(null);
+            console.log("No user returned from backend");
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load token or user:", err);
+        await AsyncStorage.removeItem("token");
+        setToken(null);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadTokenAndUser();
+  }, []);
+
+  const login = async (tokenValue: string, userData: any) => {
+    setToken(tokenValue);
+    setUser(userData);
+    setAuthToken(tokenValue);
+    await AsyncStorage.setItem("token", tokenValue);
+  };
+
+  const logout = async () => {
+    setToken(null);
+    setUser(null);
+    setAuthToken(undefined);
+    await AsyncStorage.removeItem("token");
+  };
+
+  return (
+    <UserContext.Provider value={{ token, user, login, logout }}>
+      {loading ? null : children}
+    </UserContext.Provider>
+  );
+};
