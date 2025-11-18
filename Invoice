@@ -1,0 +1,139 @@
+import React, { useState } from "react";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet } from "react-native";
+import { graphqlRequest } from "../services/api";
+
+export default function Invoice() {
+  const [requestId, setRequestId] = useState("");
+  const [repairData, setRepairData] = useState<any>(null);
+  const [totalAmount, setTotalAmount] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+
+  // Fetch repair + estimation
+  const fetchDetails = async () => {
+    setLoading(true);
+    setMessage("");
+    setRepairData(null);
+
+    const query = `
+      query($requestId: String!) {
+        repairRequest(requestId: $requestId) {
+          itemName
+          problemDescription
+          contactInfo
+          requestId
+
+          estimation {
+            total
+            items {
+              description
+              quantity
+              unitPrice
+              amount
+            }
+          }
+        }
+      }
+    `;
+
+    try {
+      const res = await graphqlRequest(query, { requestId });
+      setRepairData(res.repairRequest);
+      setTotalAmount(String(res.repairRequest.estimation.total));
+    } catch (err: any) {
+      setMessage(err.message);
+    }
+
+    setLoading(false);
+  };
+
+  // Generate Invoice API call
+  const generateInvoice = async () => {
+    setLoading(true);
+
+    const mutation = `
+      mutation($requestId: String!, $totalAmount: Decimal!) {
+        generateInvoice(
+          requestId: $requestId,
+          totalAmount: $totalAmount
+        ) {
+          invoice {
+            invoiceNumber
+          }
+        }
+      }
+    `;
+
+    try {
+      await graphqlRequest(mutation, { requestId, totalAmount: Number(totalAmount) });
+      setMessage("Invoice Generated Successfully!");
+    } catch (err: any) {
+      setMessage(err.message);
+    }
+
+    setLoading(false);
+  };
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>Generate Invoice</Text>
+
+      {/* Request ID */}
+      <TextInput
+        placeholder="Enter Request ID"
+        style={styles.input}
+        value={requestId}
+        onChangeText={setRequestId}
+      />
+
+      <TouchableOpacity onPress={fetchDetails} style={styles.button}>
+        <Text style={styles.buttonText}>Load Details</Text>
+      </TouchableOpacity>
+
+      {loading && <ActivityIndicator size="large" />}
+
+      {/* Show invoice preview */}
+      {repairData && (
+        <View>
+          <Text style={styles.header}>INVOICE PREVIEW</Text>
+
+          <Text>Customer Phone: {repairData.contactInfo}</Text>
+          <Text>Item: {repairData.itemName}</Text>
+          <Text>Problem: {repairData.problemDescription}</Text>
+          <Text>Request ID: {repairData.requestId}</Text>
+
+          <Text style={styles.subHeader}>Estimation Items</Text>
+
+          {repairData.estimation.items.map((item: any, i: number) => (
+            <View key={i} style={styles.row}>
+              <Text>{item.description}</Text>
+              <Text>{item.quantity} × {item.unitPrice}</Text>
+              <Text>₹{item.amount}</Text>
+            </View>
+          ))}
+
+          <Text style={styles.total}>Total: ₹{repairData.estimation.total}</Text>
+
+          <TouchableOpacity onPress={generateInvoice} style={styles.button}>
+            <Text style={styles.buttonText}>Generate Invoice</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {message ? <Text style={styles.message}>{message}</Text> : null}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { padding: 20 },
+  title: { fontSize: 22, fontWeight: "700", textAlign: "center" },
+  input: { borderWidth: 1, borderColor: "#ccc", padding: 12, borderRadius: 8, marginVertical: 10 },
+  button: { backgroundColor: "#2F5DFB", padding: 14, borderRadius: 8, alignItems: "center", marginVertical: 10 },
+  buttonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  header: { fontSize: 20, fontWeight: "bold", marginVertical: 10 },
+  subHeader: { marginTop: 20, fontSize: 18, fontWeight: "bold" },
+  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 5 },
+  total: { marginTop: 10, fontSize: 18, fontWeight: "bold" },
+  message: { marginTop: 20, textAlign: "center", fontSize: 16, fontWeight: "600" }
+});
