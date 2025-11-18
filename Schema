@@ -1,0 +1,409 @@
+import graphene
+import django_filters
+import graphql_jwt.shortcuts 
+from graphql_jwt.shortcuts import get_token
+from graphene_django.types import DjangoObjectType
+from graphql_jwt.decorators import login_required
+from graphene_django.filter import DjangoFilterConnectionField
+from .models import User,RepairRequest,Estimation, Invoice , Estimationitems,Updaterepairstatus,Invoice, CompanyProfile
+from django.utils.crypto import get_random_string
+from decimal import Decimal
+from graphql import GraphQLError
+from django.db.models import Max
+import graphql_jwt
+
+class UserFilter(django_filters.FilterSet):
+    class Meta:
+        model = User
+        fields = ["email", "active", "customer", "admin"]
+
+class UserType(DjangoObjectType):
+    role = graphene.String()
+
+    class Meta:
+        model = User
+        interfaces = (graphene.relay.Node,)
+        filterset_class = UserFilter
+
+    def resolve_role(self, info):
+        if self.customer:
+            return "customer"
+        elif self.admin:
+            return "admin"
+        return None
+    
+class CompanyProfileType(DjangoObjectType):
+    class Meta:
+        model = CompanyProfile
+        fields = "__all__"
+
+class RepairRequestType(DjangoObjectType):
+    class Meta:
+        model = RepairRequest
+        fields = "__all__"
+
+class EstimationType(DjangoObjectType):
+    class Meta:
+        model = Estimation
+        fields = "__all__"
+
+class EstimationItemType(DjangoObjectType):
+    amount = graphene.Decimal()
+    class Meta:
+        model = Estimationitems
+        fields = "__all__"
+
+    def resolve_amount(self,info):
+        return self.quantity*self.unit_price
+    
+class UpdaterepairstatusType(DjangoObjectType):
+    class Meta:
+       model = Updaterepairstatus
+       fields = "__all__"
+
+
+class InvoiceType(DjangoObjectType):
+    items = graphene.List(EstimationItemType)
+    class Meta:
+        model = Invoice
+    def resolve_items(self, info):
+        estimation = Estimation.objects.filter(repair_request=self._request).first()
+        if estimation:      
+            return estimation.items.all()
+        return[]
+
+class Query(graphene.ObjectType):
+
+        # User Queries
+    user = graphene.Field(UserType, id=graphene.ID(required=True))
+    users = graphene.List(UserType)
+    user_by_role = graphene.List(UserType, role=graphene.String(required=True))
+    all_users = DjangoFilterConnectionField(UserType)
+    current_user = graphene.Field(UserType)
+
+    @login_required
+    def resolve_current_user(self, info):
+        user = info.context.user
+        print("Logged in user",user.email)
+        return user
+
+    def resolve_user(self, info, id):
+        return User.objects.get(id=id)
+
+    def resolve_users(self, info):
+        return User.objects.all()
+
+    def resolve_user_by_role(self, info, role):
+        role = role.lower()
+        if role == "customer":
+            return User.objects.filter(customer=True)
+        elif role == "admin":
+            return User.objects.filter(admin=True)
+        return []
+    
+# admin view request
+    all_requests = graphene.List(RepairRequestType)
+    repair_request = graphene.Field(RepairRequestType, request_id=graphene.String(required=True))
+
+    def resolve_all_requests(root, info):
+        return RepairRequest.objects.all().order_by('-created_at')
+    
+    def resolve_repair_request(root, info, request_id):
+        return RepairRequest.objects.get(request_id=request_id)
+    
+    my_requests = graphene.List(RepairRequestType)
+
+    @login_required
+    def resolve_my_requests(self,info):
+        user = info.context.user
+        return RepairRequest.objects.filter(customer=user).order_by('-created_at')
+
+    # customer VIEW THEIR ESTIMATION
+        # multiple estimation:
+    my_estimations = graphene.List(EstimationType)
+    @login_required
+    def resolve_my_estimations(self,info):
+        print("Logged in user",info.context.user)
+        return Estimation.objects.filter(repair_request__customer=info.context.user)
+  
+
+        # single estimation based on id:
+    my_estimation = graphene.Field(EstimationType, estimation_id=graphene.ID(required=True))
+    @login_required
+    def resolve_my_estimation(self, info, estimation_id):
+        user = info.context.user
+        estimation_id = int(estimation_id)
+        return Estimation.objects.get(id=estimation_id,repair_request__customer=user)
+    
+    # Admin view estimatin
+    admin_estimation = graphene.Field(
+        EstimationType,
+        request_id=graphene.ID(required=True)
+    )
+    @login_required
+    def resolve_admin_estimation(self,info,request_id):
+        user = info.context.user
+
+        if not user.admin:
+            raise GraphQLError("You are not authorized")
+        try:
+            return Estimation.objects.get(repair_request__request_id=request_id)
+        except Estimation.DoesNotExist:
+            return None
+    
+# Mutations
+class CreateUser(graphene.Mutation):
+    user = graphene.Field(UserType)
+    token = graphene.String()
+    success = graphene.Boolean()
+    message = graphene.String()
+
+    class Arguments:
+        email = graphene.String(required=True)
+        password = graphene.String(required=True)
+        role = graphene.String(required=True)
+
+    def mutate(self, info, email, password, role):
+        if User.objects.filter(email=email).exists():
+            return CreateUser(success=False, message="Email already registered")
+
+        role = role.lower()
+        if role == "customer":
+            user = User.objects.create_customeruser(email=email, password=password)
+        elif role == "admin":
+            user = User.objects.create_superuser(email=email, password=password)
+        else:
+            return CreateUser(success=False, message="Invalid role")
+
+        token = get_token(user)
+        return CreateUser(success=True, message="User created successfully", user=user, token=token)
+
+
+class CustomTokenAuth(graphene.Mutation):
+    token = graphene.String()
+    success = graphene.Boolean()
+    message = graphene.String()
+    user = graphene.Field(UserType)
+
+    class Arguments:
+        email = graphene.String(required=True)
+        password = graphene.String(required=True)
+
+    def mutate(self, info, email, password):
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return CustomTokenAuth(success=False, message="Invalid email or password", token=None, user=None)
+
+        if not user.check_password(password):
+            return CustomTokenAuth(success=False, message="Invalid email or password", token=None, user=None)
+
+        token = get_token(user)
+        return CustomTokenAuth(success=True, message="Login successful", token=token, user=user)
+    
+class CreateRepairRequest(graphene.Mutation):
+    class Arguments:
+        item_name = graphene.String(required=True)
+        problem_description = graphene.String(required=True)
+        contact_info = graphene.String(required=True)
+
+    repair_request = graphene.Field(RepairRequestType)
+    @classmethod
+    @login_required
+    def mutate(cls, root, info, item_name, problem_description, contact_info):
+        user = info.context.user
+        print("DEBUG USER:", user.email, user.customer, user.admin)
+        if not user.customer:
+            raise GraphQLError("Only customer can create repair request")
+        request = RepairRequest.objects.create(
+            customer = user,
+            item_name=item_name,
+            problem_description=problem_description,
+            contact_info=contact_info
+            )
+        return CreateRepairRequest(repair_request=request)
+        
+# class CreateEstimation(graphene.Mutation):
+#     class Arguments:
+#         repair_request_id = graphene.String(required=True)
+#     estimation = graphene.Field(EstimationType)
+
+#     @classmethod
+#     @login_required
+#     def mutate(cls, root, info, repair_request_id):
+#         user = info.context.user
+#         if not user.admin:
+#            raise GraphQLError("Only admin can add estimation")
+#         repair_request = RepairRequest.objects.get(request_id=repair_request_id)
+#         estimation = Estimation.objects.create(repair_request=repair_request)
+#         return CreateEstimation(estimation=estimation)
+
+class AddEstimationItem(graphene.Mutation):
+    class Arguments:
+        repair_request_id = graphene.String(required=True)
+        description = graphene.String(required=True)
+        quantity = graphene.Int(required=True)
+        unit_price = graphene.Decimal(required=True)
+
+    item = graphene.Field(EstimationItemType)
+
+    @classmethod
+    @login_required
+    def mutate(cls,root,info,repair_request_id,description,quantity,unit_price):
+        user = info.context.user
+
+        if not user.admin:
+            raise GraphQLError("Only admin can add items")
+        
+        try:
+            repair_request = RepairRequest.objects.get(request_id=repair_request_id)
+        except RepairRequest.DoesNotExist:
+            raise Exception("Repair request not found")
+        
+        estimation, created = Estimation.objects.get_or_create(repair_request=repair_request)
+
+        item = Estimationitems.objects.create(
+            estimation=estimation, 
+            description=description,
+            quantity=quantity,
+            unit_price=unit_price
+            )
+        estimation.calculate_totals()
+        return AddEstimationItem(item=item)
+        
+
+class ApproveEstimation(graphene.Mutation):
+    class Arguments:
+        request_id = graphene.String(required=True)
+        approved = graphene.Boolean(required=True)
+    estimation = graphene.Field(EstimationType)
+    success = graphene.Boolean()
+    message = graphene.String()
+
+    @classmethod
+    @login_required
+    def mutate(cls, root, info, request_id, approved):
+        user = info.context.user
+        if not user.customer:
+            raise GraphQLError("Only customer can approve estimation")
+        repair_request = RepairRequest.objects.filter(customer=user,request_id=request_id).first()
+        if not repair_request:
+            return ApproveEstimation(success=False,message="Repair request not found for this user")
+        estimation = Estimation.objects.filter(repair_request=repair_request).first()
+        if not estimation:
+            return ApproveEstimation(success=False, message="No estimation found for this repair request")
+        estimation.approved = approved
+        estimation.save()
+
+        if approved:
+            repair_request.status="Accepted"
+            repair_request.save()
+
+        return ApproveEstimation(estimation=estimation, success=True, message=f"Estimation{'approved' if approved else 'disapprived'} successfully")
+        
+class UpdateRepairStatus(graphene.Mutation):
+    class Arguments:
+        request_id = graphene.String(required=True)
+        update_status = graphene.String(required=True)
+
+    success = graphene.Boolean()
+    message = graphene.String()
+    status = graphene.String()
+
+    @classmethod
+    def mutate(cls, root, info, request_id, update_status):
+        user = info.context.user
+        if not user.admin:
+            raise GraphQLError("Only admin can update repair status")
+        
+        try:
+            repair_request = RepairRequest.objects.get(request_id=request_id)
+        except RepairRequest.DoesNotExist:
+            raise GraphQLError("Repair request does not exist")
+
+        repair_request.status = update_status
+        repair_request.save()
+
+        Updaterepairstatus.objects.create(
+            repairrequest=repair_request,
+            update_status=update_status
+        )
+        return UpdateRepairStatus(
+            success=True,message="Status updated successfully", status=update_status
+        )
+
+
+
+class GenerateInvoice(graphene.Mutation):
+    class Arguments:
+        request_id = graphene.String(required=True)
+        total_amount = graphene.Decimal(required=True)
+        parts_replaced = graphene.String(required=False)
+        notes = graphene.String(required=False)
+    invoice = graphene.Field(InvoiceType)
+
+    @classmethod
+    @login_required
+    def mutate(cls, root, info, request_id, total_amount, parts_replaced=None, notes=None):
+        user = info.context.user
+        if not user.admin:
+            raise GraphQLError("Only admin can generate invoice")
+        try:
+            repair_request = RepairRequest.objects.get(request_id=request_id)
+        except RepairRequest.DoesNotExist:
+            raise GraphQLError("Repair request not found")
+        # status must be in delivery state
+        if repair_request.status !="READY_TO_DELIVER":
+            raise GraphQLError("Invoice can only be generated at delivery state")
+        # Avoid duplicate
+        if hasattr(repair_request,"invoice"):
+            raise GraphQLError("Invoice already generated")
+        
+        # create invoice number
+        max_id = Invoice.objects.aggregate(max_id=Max("id"))["max_id"]
+        next_number = (max_id +1) if max_id else 1
+        invoice_no = f"INV-{next_number:05d}"
+        invoice = Invoice.objects.create(repair_request=repair_request,invoice_number=invoice_no, total_amount=total_amount, parts_replaced=parts_replaced, notes=notes)
+        return GenerateInvoice(invoice=invoice)
+    
+class CreateCompanyProfile(graphene.Mutation):
+    class Arguments:
+        name = graphene.String(required=True)
+        address = graphene.String(required=True)
+        phone = graphene.String(required=True)
+        email = graphene.String(required=True)
+        
+    company_profile = graphene.Field(CompanyProfileType)
+
+    @classmethod
+    @login_required
+    def mutate(cls, root, info, name, address, phone, email):
+        user = info.context.user
+        if not user.admin:
+            raise GraphQLError("Only admin can create comapny profile")
+        profile = CompanyProfile.objects.create(
+            name=name, address=address, phone=phone, email=email)
+        return CreateCompanyProfile(company_profile=profile)
+
+# Root schema
+class Mutation(graphene.ObjectType):
+    create_user = CreateUser.Field()
+    custom_token_auth = CustomTokenAuth.Field()
+    create_repair_request = CreateRepairRequest.Field()
+    #create_estimation = CreateEstimation.Field()
+    add_estimation_item = AddEstimationItem.Field()
+    approve_estimation = ApproveEstimation.Field()
+    update_repair_status = UpdateRepairStatus.Field()
+    generate_invoice = GenerateInvoice.Field()
+    create_company_profile = CreateCompanyProfile.Field()
+
+    token_auth = graphql_jwt.ObtainJSONWebToken.Field()
+    verify_token = graphql_jwt.Verify.Field()
+    refresh_token = graphql_jwt.Refresh.Field()
+
+
+
+
+
+
+
