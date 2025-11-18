@@ -1,0 +1,102 @@
+import React, { useEffect, useState, useContext,useCallback } from "react";
+import { View, Text, Button, ScrollView, TouchableOpacity } from "react-native";
+import { graphqlRequest } from "../services/api";
+import { UserContext } from "../components/ui/UserContext";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
+
+export default function ViewRequest() {
+  const { token } = useContext(UserContext);
+  const navigation = useNavigation();  
+  const [requests, setRequests] = useState([]);
+
+  const loadRequests = async () => {
+    const query = `
+      query {
+        allRequests {
+          requestId
+          itemName
+          problemDescription
+          contactInfo
+          status
+        }
+      }
+    `;
+    const res = await graphqlRequest(query);
+    console.log("Loaded Requests:", res);
+
+    setRequests((res?.allRequests || res?.data?.allRequests || []).filter(r=>r));
+  };
+
+  useEffect(() => {
+    loadRequests();
+  }, []);
+
+    //  Runs every time screen becomes visible again
+  useFocusEffect(
+    useCallback(() => {
+      loadRequests();
+    }, [])
+  );
+
+  return (
+    <ScrollView style={{ padding: 20 }}>
+      <Text style={{ fontSize: 22, fontWeight: "bold", marginBottom: 10 }}>
+        Repair Requests
+      </Text>
+
+      {requests.map((req, index) => (
+        <View
+          key={index}
+          style={{
+            padding: 15,
+            borderWidth: 1,
+            borderRadius: 10,
+            marginVertical: 10,
+          }}
+        >
+          <Text>Request ID: {req.requestId}</Text>
+          <Text>Item: {req.itemName}</Text>
+          <Text>Problem: {req.problemDescription}</Text>
+          <Text>Contact: {req.contactInfo}</Text>
+          <Text>Status: {req.status}</Text>
+
+          <TouchableOpacity
+            style={{
+              backgroundColor: "blue",
+              padding: 10,
+              marginTop: 10,
+              borderRadius: 8,
+            }}
+            onPress={() =>
+              navigation.navigate("AddEstimation", {
+                requestId: req.requestId,
+              })
+            }
+          >
+            <Text style={{ color: "white", textAlign: "center" }}>
+              Add Estimation
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{
+              backgroundColor: "blue",
+              padding: 10,
+              marginTop: 10,
+              borderRadius: 8,
+            }}
+            onPress={() =>
+              navigation.navigate("AdminEstimation", {
+                requestId: req.requestId,
+              })
+            }
+          >
+            <Text style={{ color: "white", textAlign: "center" }}>
+              View Estimation
+            </Text>
+          </TouchableOpacity>
+          
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
