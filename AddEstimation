@@ -1,0 +1,203 @@
+import React, { useState, useContext, useLayoutEffect } from "react";
+import {View,Text,TextInput,TouchableOpacity,FlatList,StyleSheet,Alert,} from "react-native";
+import { graphqlRequest } from "../services/api";
+import { UserContext } from "../components/ui/UserContext";
+import { useRoute, useNavigation } from "@react-navigation/native";
+import {useLogout} from "../hooks/Logout"
+
+
+
+export default function AddEstimation() {
+  const { token } = useContext(UserContext);
+  const route = useRoute();
+  const { requestId } = route.params;
+  const logout = useLogout();
+  const navigation = useNavigation();
+
+  const [items, setItems] = useState<any[]>([]);
+  const [description, setDescription] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [unitPrice, setUnitPrice] = useState("");
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity onPress={logout} style={{ marginRight: 15 }}>
+          <Text style={{ color: "red", fontWeight: "bold" }}>Logout</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]);
+
+  // Add item locally (no GraphQL yet)
+  const handleAddItem = () => {
+    if (!description || !quantity || !unitPrice) {
+      Alert.alert("Error", "Please fill all fields");
+      return;
+    }
+
+    const qty = Number(quantity);
+    const price = Number(unitPrice);
+    const amount = qty * price;
+
+    const newItem = {
+      id: Date.now().toString(), 
+      description,
+      quantity: qty,
+      unitPrice: price,
+      amount,
+    };
+
+    setItems((prev) => [...prev, newItem]);
+    setDescription("");
+    setQuantity("");
+    setUnitPrice("");
+  };
+
+  // Save all items to backend
+  const handleSaveEstimation = async () => {
+    if (items.length === 0)
+      return Alert.alert("Error", "Please add item");
+
+    try {
+      for (const item of items) {
+        const query = `
+          mutation {
+            addEstimationItem(
+              repairRequestId: "${requestId}",
+              description: "${item.description.replace(/"/g, '\\"')}",
+              quantity: ${item.quantity},
+              unitPrice: ${item.unitPrice}
+            ) {
+              item { id description quantity unitPrice amount }
+            }
+          }
+        `;
+        await graphqlRequest(query, token);
+      }
+      Alert.alert("Success", "Estimation saved successfully");
+      setItems([]);
+    } catch (error) {
+      console.error("Error saving estimation:", error);
+      Alert.alert("Error", "Failed to save estimation");
+    }
+  };
+
+  const total = items.reduce((acc, item) => acc + item.amount, 0);
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Add Estimation</Text>
+      <Text style={styles.subtext}>Request ID: {requestId}</Text>
+
+      <View style={styles.card}>
+        {/* Table Header */}
+        <View style={styles.tableHeader}>
+          <Text style={[styles.cell, { flex: 2 }]}>Description</Text>
+          <Text style={[styles.cell, { flex: 1 }]}>Qty</Text>
+          <Text style={[styles.cell, { flex: 1 }]}>Unit Price</Text>
+          <Text style={[styles.cell, { flex: 1 }]}>Amount</Text>
+        </View>
+
+        {/* Table Rows */}
+        <FlatList
+          data={items}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <View style={styles.tableRow}>
+              <Text style={[styles.cell, { flex: 2 }]}>{item.description}</Text>
+              <Text style={[styles.cell, { flex: 1 }]}>{item.quantity}</Text>
+              <Text style={[styles.cell, { flex: 1 }]}>₹{item.unitPrice}</Text>
+              <Text style={[styles.cell, { flex: 1 }]}>₹{item.amount}</Text>
+            </View>
+          )}
+        />
+
+        {/* Add New Item Row */}
+        <View style={styles.inputRow}>
+          <TextInput
+            style={[styles.input, { flex: 2 }]}
+            placeholder="Description"
+            value={description}
+            onChangeText={setDescription}
+          />
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            placeholder="Qty"
+            keyboardType="numeric"
+            value={quantity}
+            onChangeText={setQuantity}
+          />
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            placeholder="Unit Price"
+            keyboardType="numeric"
+            value={unitPrice}
+            onChangeText={setUnitPrice}
+          />
+          <TouchableOpacity onPress={handleAddItem}>
+            <Text style={styles.addText}>＋</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Totals Section */}
+        <View style={styles.summary}>
+          <Text style={styles.totalText}>TOTAL: ₹{total.toFixed(2)}</Text>
+        </View>
+
+        <TouchableOpacity style={styles.saveButton} onPress={handleSaveEstimation}>
+          <Text style={styles.saveButtonText}>Save Estimation</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 20, backgroundColor: "#F7F8FA" },
+  title: { fontSize: 22, fontWeight: "bold", marginBottom: 8, textAlign: "center" },
+  subtext: { textAlign: "center", color: "#666", marginBottom: 20 },
+  card: {
+    backgroundColor: "white",
+    padding: 15,
+    borderRadius: 12,
+    elevation: 3,
+  },
+  tableHeader: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderColor: "#DDD",
+    paddingBottom: 8,
+  },
+  tableRow: {
+    flexDirection: "row",
+    paddingVertical: 6,
+    borderBottomWidth: 0.5,
+    borderColor: "#EEE",
+  },
+  cell: { fontSize: 14, color: "#333" },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 12,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#CCC",
+    borderRadius: 8,
+    padding: 8,
+    fontSize: 14,
+    marginRight: 6,
+  },
+  addText: { fontSize: 26, color: "#007AFF", paddingHorizontal: 6 },
+  summary: { marginTop: 15 },
+  totalText: { fontSize: 18, fontWeight: "bold", color: "#000", marginTop: 5 },
+  saveButton: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  saveButtonText: { color: "white", fontSize: 17, fontWeight: "600" },
+});
