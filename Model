@@ -63,9 +63,9 @@ class RepairRequest(models.Model):
         ('REJECTED',"REJECTED"),
         # Admin side
         ('STARTED','STARTED'),
-        ('REPAIRING','REPAIRRING'),
+        ('REPAIRING','REPAIRING'),
         ('TESTING','TESTING'),
-        ('READY TO DELIVER','READY TO DELIVER'),
+        ('READY_TO_DELIVER','READY_TO_DELIVER'),
 
     ]
 
@@ -149,6 +149,8 @@ class Invoice(models.Model):
     parts_replaced = models.TextField(blank=True,null=True)
     notes = models.TextField(blank=True,null=True)
     generated_at = models.DateTimeField(auto_now_add=True)
+
+    pdf_url = models.URLField(null=True, blank=True)
 
     def __str__(self):
         return f"Invoice for {self.repair_request.request_id} - {self.total_amount}"
