@@ -89,6 +89,7 @@ export default function AdminEstimation() {
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total:</Text>
           <Text style={styles.totalAmount}>₹{estimation.total}</Text>
+          {request.status =="ACCEPTED" && (
           <TouchableOpacity
             style={{
               backgroundColor: "blue",
@@ -96,6 +97,7 @@ export default function AdminEstimation() {
               marginTop: 10,
               borderRadius: 8,
             }}
+            
             onPress={() => {
               const repairData = {
                 requestId: requestId,
@@ -115,6 +117,7 @@ export default function AdminEstimation() {
               Update Status
             </Text>
           </TouchableOpacity>
+          )}
         </View>
       </View>
     </ScrollView>
