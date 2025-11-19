@@ -11,6 +11,8 @@ from decimal import Decimal
 from graphql import GraphQLError
 from django.db.models import Max
 import graphql_jwt
+from .utils.pdf_generator import create_invoice_pdf
+
 
 class UserFilter(django_filters.FilterSet):
     class Meta:
@@ -66,6 +68,7 @@ class InvoiceType(DjangoObjectType):
     items = graphene.List(EstimationItemType)
     class Meta:
         model = Invoice
+        fields = "__all__"
     def resolve_items(self, info):
         estimation = Estimation.objects.filter(repair_request=self._request).first()
         if estimation:      
@@ -285,7 +288,7 @@ class ApproveEstimation(graphene.Mutation):
     def mutate(cls, root, info, request_id, approved):
         user = info.context.user
         if not user.customer:
-            raise GraphQLError("Only customer can approve estimation")
+            raise GraphQLError("Only customer can approve or reject estimation")
         repair_request = RepairRequest.objects.filter(customer=user,request_id=request_id).first()
         if not repair_request:
             return ApproveEstimation(success=False,message="Repair request not found for this user")
@@ -296,7 +299,7 @@ class ApproveEstimation(graphene.Mutation):
         estimation.save()
 
         if approved:
-            repair_request.status="Accepted"
+            repair_request.status="ACCEPTED"
             repair_request.save()
 
         return ApproveEstimation(estimation=estimation, success=True, message=f"Estimation{'approved' if approved else 'disapprived'} successfully")
@@ -364,6 +367,11 @@ class GenerateInvoice(graphene.Mutation):
         next_number = (max_id +1) if max_id else 1
         invoice_no = f"INV-{next_number:05d}"
         invoice = Invoice.objects.create(repair_request=repair_request,invoice_number=invoice_no, total_amount=total_amount, parts_replaced=parts_replaced, notes=notes)
+
+        pdf_url = create_invoice_pdf(invoice)
+        invoice.pdf_url = pdf_url
+        invoice.save()
+
         return GenerateInvoice(invoice=invoice)
     
 class CreateCompanyProfile(graphene.Mutation):
