@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { graphqlRequest, setAuthToken } from "../services/api";
 import { UserContext } from "../components/ui/UserContext";
@@ -58,6 +59,10 @@ export default function ApproveEstimation() {
           id
           total
           approved
+          invoice{
+            invoiceNumber
+            pdfUrl
+            }
           repairRequest {
             requestId
             itemName
@@ -213,6 +218,13 @@ export default function ApproveEstimation() {
               <Text style={styles.buttonText}>Reject</Text>
             </TouchableOpacity>
           </View>
+        )}
+        {item.invoice?.pdfUrl &&(
+          <TouchableOpacity onPress={() =>Linking.openURL(item.invoice.pdfUrl)}>
+            <Text style={{color:"blue",marginTop:10}}>
+              View Invoice
+            </Text>
+          </TouchableOpacity>
         )}
       </View>
     );
