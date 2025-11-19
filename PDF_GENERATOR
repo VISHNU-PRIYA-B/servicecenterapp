@@ -1,0 +1,71 @@
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib import colors
+from reportlab.platypus import Table, TableStyle
+from django.conf import settings
+import os
+
+def create_invoice_pdf(invoice):
+    file_name = f"INV-{invoice.repair_request.request_id}.pdf"
+    file_path = os.path.join(settings.MEDIA_ROOT, "invoices", file_name)
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+    p = canvas.Canvas(file_path, pagesize=A4)
+    width, height = A4
+    y = height - 50
+
+    # Title
+    p.setFont("Helvetica-Bold", 20)
+    p.drawCentredString(width/2, y, "INVOICE PREVIEW")
+
+    # Customer & Item Info
+    p.setFont("Helvetica", 12)
+    y -= 50
+    info_lines = [
+        f"Customer Phone: {invoice.repair_request.contact_info}",
+        f"Item: {invoice.repair_request.item_name}",
+        f"Problem: {invoice.repair_request.problem_description}",
+        f"Request ID: {invoice.repair_request.request_id}"
+    ]
+    for line in info_lines:
+        p.drawString(50, y, line)
+        y -= 20
+
+    # Estimation Items Table
+    y -= 20
+    estimation = invoice.repair_request.estimation
+    data = [["Description", "Quantity × Unit Price", "Amount"]]
+
+    for item in estimation.items.all():
+        data.append([
+            item.description,
+            f"{item.quantity} × {item.unit_price}",
+            f"₹{item.amount}"
+        ])
+
+    data.append(["", "Total", f"₹{estimation.total}"])
+
+    table = Table(data, colWidths=[300, 100, 100])
+    style = TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.black),
+        ('ALIGN', (1,1), (-1,-1), 'CENTER'),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+        ('GRID', (0,0), (-1,-1), 1, colors.black),
+        ('BOTTOMPADDING', (0,0), (-1,0), 8),
+        ('TOPPADDING', (0,0), (-1,0), 8),
+    ])
+    table.setStyle(style)
+    table.wrapOn(p, width, height)
+    table.drawOn(p, 50, y - (20 * len(data)))  # adjust y to fit table
+
+    p.showPage()
+    p.save()
+
+    # Save URL
+    pdf_url = f"{settings.BACKEND_BASE_URL}{settings.MEDIA_URL}invoices/{file_name}"
+    invoice.pdf_url = pdf_url
+    invoice.save(update_fields=['pdf_url'])
+
+    return pdf_url
