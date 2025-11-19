@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet,Linking } from "react-native";
 import { graphqlRequest } from "../services/api";
 
 export default function Invoice() {
@@ -8,6 +8,7 @@ export default function Invoice() {
   const [totalAmount, setTotalAmount] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [pdfUrl, setPdfUrl] = useState("");
 
   // Fetch repair + estimation
   const fetchDetails = async () => {
@@ -59,14 +60,16 @@ export default function Invoice() {
         ) {
           invoice {
             invoiceNumber
+            pdfUrl
           }
         }
       }
     `;
 
     try {
-      await graphqlRequest(mutation, { requestId, totalAmount: Number(totalAmount) });
+      const response = await graphqlRequest(mutation, { requestId, totalAmount: Number(totalAmount) });
       setMessage("Invoice Generated Successfully!");
+      setPdfUrl(response.generateInvoice.invoice.pdfUrl);
     } catch (err: any) {
       setMessage(err.message);
     }
@@ -117,6 +120,11 @@ export default function Invoice() {
           <TouchableOpacity onPress={generateInvoice} style={styles.button}>
             <Text style={styles.buttonText}>Generate Invoice</Text>
           </TouchableOpacity>
+          {pdfUrl !== "" && (
+            <TouchableOpacity style={styles.pdfButton} onPress={() => Linking.openURL(pdfUrl)}>
+              <Text style={styles.pdfButtonText}>View Invoice PDF</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -126,14 +134,72 @@ export default function Invoice() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20 },
-  title: { fontSize: 22, fontWeight: "700", textAlign: "center" },
-  input: { borderWidth: 1, borderColor: "#ccc", padding: 12, borderRadius: 8, marginVertical: 10 },
-  button: { backgroundColor: "#2F5DFB", padding: 14, borderRadius: 8, alignItems: "center", marginVertical: 10 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  header: { fontSize: 20, fontWeight: "bold", marginVertical: 10 },
-  subHeader: { marginTop: 20, fontSize: 18, fontWeight: "bold" },
-  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 5 },
-  total: { marginTop: 10, fontSize: 18, fontWeight: "bold" },
-  message: { marginTop: 20, textAlign: "center", fontSize: 16, fontWeight: "600" }
+  container: { 
+    padding: 20 
+  },
+  title: { 
+    fontSize: 22, 
+    fontWeight: "700", 
+    textAlign: "center" 
+  },
+  input: { 
+    borderWidth: 1, 
+    borderColor: "#ccc", 
+    padding: 12, 
+    borderRadius: 8, 
+    marginVertical: 10 
+  },
+  button: { 
+    backgroundColor: "#2F5DFB", 
+    padding: 14, 
+    borderRadius: 8, 
+    alignItems: "center", 
+    marginVertical: 10 
+  },
+  buttonText: { 
+    color: "#fff", 
+    fontSize: 16, 
+    fontWeight: "700" 
+  },
+  header: { 
+    fontSize: 20, 
+    fontWeight: "bold", 
+    marginVertical: 10 
+  },
+  subHeader: { 
+    marginTop: 20, 
+    fontSize: 18, 
+    fontWeight: "bold" 
+  },
+  row: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    paddingVertical: 5 
+  },
+  total: { 
+    marginTop: 10, 
+    fontSize: 18, 
+    fontWeight: "bold" 
+  },
+  message: { 
+    marginTop: 20, 
+    textAlign: "center", 
+    fontSize: 16, 
+    fontWeight: "600" 
+  },
+  pdfButton: 
+  {
+  backgroundColor: "#4CAF50",
+  padding: 12,
+  borderRadius: 8,
+  marginTop: 15,
+  alignItems: "center",
+},
+
+pdfButtonText: {
+  color: "#fff",
+  fontSize: 16,
+  fontWeight: "bold",
+},
+
 });
