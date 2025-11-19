@@ -45,9 +45,15 @@ class RepairRequestType(DjangoObjectType):
         fields = "__all__"
 
 class EstimationType(DjangoObjectType):
+    invoice = graphene.Field(lambda: InvoiceType)
     class Meta:
         model = Estimation
         fields = "__all__"
+    def resolve_invoice(self,info):
+        try:
+            return self.repair_request.invoice
+        except:
+            return None
 
 class EstimationItemType(DjangoObjectType):
     amount = graphene.Decimal()
@@ -70,7 +76,7 @@ class InvoiceType(DjangoObjectType):
         model = Invoice
         fields = "__all__"
     def resolve_items(self, info):
-        estimation = Estimation.objects.filter(repair_request=self._request).first()
+        estimation = Estimation.objects.filter(repair_request=self.repair_request).first()
         if estimation:      
             return estimation.items.all()
         return[]
