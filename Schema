@@ -307,8 +307,11 @@ class ApproveEstimation(graphene.Mutation):
         if approved:
             repair_request.status="ACCEPTED"
             repair_request.save()
+        else:
+            repair_request.status="REJECTED"
+            repair_request.save()
 
-        return ApproveEstimation(estimation=estimation, success=True, message=f"Estimation{'approved' if approved else 'disapprived'} successfully")
+        return ApproveEstimation(estimation=estimation, success=True, message=f"Estimation{'approved' if approved else 'disapproved'} successfully")
         
 class UpdateRepairStatus(graphene.Mutation):
     class Arguments:
@@ -421,3 +424,4 @@ class Mutation(graphene.ObjectType):
 
 
 
+ 
