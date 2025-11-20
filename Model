@@ -141,7 +141,7 @@ class Updaterepairstatus(models.Model):
        self.save()
        return self.amount
 
-
+ 
 class Invoice(models.Model):
     invoice_number = models.CharField(max_length=50,unique=True,null=True,blank=True)
     repair_request = models.OneToOneField(RepairRequest, on_delete=models.CASCADE, related_name="invoice")
