@@ -89,7 +89,7 @@ export default function AdminEstimation() {
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total:</Text>
           <Text style={styles.totalAmount}>₹{estimation.total}</Text>
-          {request.status =="ACCEPTED" && (
+          {request.status !== "REJECTED" &&(
           <TouchableOpacity
             style={{
               backgroundColor: "blue",
