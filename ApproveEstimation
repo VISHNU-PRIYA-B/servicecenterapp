@@ -1,14 +1,5 @@
 import React, { useEffect, useState, useContext, useLayoutEffect } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Linking,
-} from "react-native";
+import {View,Text,StyleSheet,FlatList,TouchableOpacity,Alert,ActivityIndicator,Linking,} from "react-native";
 import { graphqlRequest, setAuthToken } from "../services/api";
 import { UserContext } from "../components/ui/UserContext";
 import { useLogout } from "../hooks/Logout";
@@ -22,13 +13,7 @@ export default function ApproveEstimation() {
   const logout = useLogout();
   const navigation = useNavigation();
 
-  // --- DEBUG: log the user object ---
-  console.log("Current user object:", user);
-
-  // Adjust this depending on your backend user object
-  const isCustomer = user?.customer === true || user?.role === "CUSTOMER";
-
-  // Add Logout button in header
+  // Add Logout button
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -39,12 +24,10 @@ export default function ApproveEstimation() {
     });
   }, [navigation]);
 
-  // Fetch estimations
+  // Fetch customer estimations
   const fetchMyEstimations = async () => {
-    let tokenToUse = contextToken;
-    if (!tokenToUse) {
-      tokenToUse = await AsyncStorage.getItem("token");
-    }
+    let tokenToUse = contextToken || (await AsyncStorage.getItem("token"));
+
     if (!tokenToUse) {
       Alert.alert("Error", "You are not logged in.");
       return;
@@ -59,10 +42,10 @@ export default function ApproveEstimation() {
           id
           total
           approved
-          invoice{
+          invoice {
             invoiceNumber
             pdfUrl
-            }
+          }
           repairRequest {
             requestId
             itemName
@@ -82,9 +65,14 @@ export default function ApproveEstimation() {
 
     try {
       const response = await graphqlRequest(query, {}, tokenToUse);
-      const data = response?.data?.myEstimations || response?.myEstimations || [];
+
+      const data =
+        response?.data?.myEstimations ||
+        response?.myEstimations ||
+        [];
+
       setEstimations(data);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Fetch error:", err);
       Alert.alert("Error", "Failed to fetch your estimations.");
     } finally {
@@ -96,9 +84,9 @@ export default function ApproveEstimation() {
     fetchMyEstimations();
   }, []);
 
-  // Approve handler
   const handleApprove = async (requestId: string) => {
     if (!requestId) return;
+
     try {
       const mutation = `
         mutation {
@@ -108,12 +96,18 @@ export default function ApproveEstimation() {
           }
         }
       `;
+
       const response = await graphqlRequest(mutation);
-      if (response?.data?.approveEstimation?.success) {
+
+      const result =
+        response?.approveEstimation ||
+        response?.data?.approveEstimation;
+
+      if (result?.success) {
         Alert.alert("Success", "Approved successfully.");
         fetchMyEstimations();
       } else {
-        Alert.alert("Error", response?.data?.approveEstimation?.message || "Could not approve.");
+        Alert.alert("Error", result?.message || "Could not approve.");
       }
     } catch (err) {
       console.log("Approve error", err);
@@ -121,9 +115,10 @@ export default function ApproveEstimation() {
     }
   };
 
-  // Reject handler
+
   const handleReject = async (requestId: string) => {
     if (!requestId) return;
+
     try {
       const mutation = `
         mutation {
@@ -133,12 +128,18 @@ export default function ApproveEstimation() {
           }
         }
       `;
+
       const response = await graphqlRequest(mutation);
-      if (response?.data?.approveEstimation?.success) {
+
+      const result =
+        response?.approveEstimation ||
+        response?.data?.approveEstimation;
+
+      if (result?.success) {
         Alert.alert("Rejected", "Estimation rejected successfully.");
         fetchMyEstimations();
       } else {
-        Alert.alert("Error", response?.data?.approveEstimation?.message || "Could not reject.");
+        Alert.alert("Error", result?.message || "Could not reject.");
       }
     } catch (err) {
       console.log("Reject error", err);
@@ -146,7 +147,7 @@ export default function ApproveEstimation() {
     }
   };
 
-  // Loading view
+  // Loading View
   if (loading) {
     return (
       <View style={styles.center}>
@@ -156,7 +157,7 @@ export default function ApproveEstimation() {
     );
   }
 
-  // Empty view
+  // Empty View
   if (!estimations || estimations.length === 0) {
     return (
       <View style={styles.center}>
@@ -165,29 +166,37 @@ export default function ApproveEstimation() {
     );
   }
 
-  // Card Renderer
+  // Render single estimation card
   const renderItem = ({ item }: any) => {
     const total =
-      item.items?.reduce((sum: number, i: any) => sum + Number(i.amount || 0), 0) ||
-      Number(item.total) ||
-      0;
+      item.items?.reduce(
+        (sum: number, i: any) => sum + Number(i.amount || 0),
+        0
+      ) || Number(item.total) || 0;
 
     const requestId = item.repairRequest?.requestId;
     const status = item.repairRequest?.status?.toLowerCase();
-
-    // --- DEBUG: log each repair request ---
-    console.log("Repair request:", item.repairRequest, "Status:", status);
 
     const showButtons = requestId && status === "pending";
 
     return (
       <View style={styles.card}>
-        <Text style={styles.heading}>{item.repairRequest?.itemName || "No Item Name"}</Text>
-        <Text style={styles.label}>
-          Problem: <Text style={styles.value}>{item.repairRequest?.problemDescription || "N/A"}</Text>
+        <Text style={styles.heading}>
+          {item.repairRequest?.itemName || "No Item Name"}
         </Text>
+
         <Text style={styles.label}>
-          Status: <Text style={styles.value}>{item.repairRequest?.status || "N/A"}</Text>
+          Problem:{" "}
+          <Text style={styles.value}>
+            {item.repairRequest?.problemDescription || "N/A"}
+          </Text>
+        </Text>
+
+        <Text style={styles.label}>
+          Status:{" "}
+          <Text style={styles.value}>
+            {item.repairRequest?.status || "N/A"}
+          </Text>
         </Text>
 
         <Text style={styles.subHeading}>Estimation</Text>
@@ -211,19 +220,27 @@ export default function ApproveEstimation() {
 
         {showButtons && (
           <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.acceptButton} onPress={() => handleApprove(requestId)}>
+            <TouchableOpacity
+              style={styles.acceptButton}
+              onPress={() => handleApprove(requestId)}
+            >
               <Text style={styles.buttonText}>Accept</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.rejectButton} onPress={() => handleReject(requestId)}>
+
+            <TouchableOpacity
+              style={styles.rejectButton}
+              onPress={() => handleReject(requestId)}
+            >
               <Text style={styles.buttonText}>Reject</Text>
             </TouchableOpacity>
           </View>
         )}
-        {item.invoice?.pdfUrl &&(
-          <TouchableOpacity onPress={() =>Linking.openURL(item.invoice.pdfUrl)}>
-            <Text style={{color:"blue",marginTop:10}}>
-              View Invoice
-            </Text>
+
+        {item.invoice?.pdfUrl && (
+          <TouchableOpacity
+            onPress={() => Linking.openURL(item.invoice.pdfUrl)}
+          >
+            <Text style={{ color: "blue", marginTop: 10 }}>View Invoice</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -280,3 +297,4 @@ const styles = StyleSheet.create({
   noItems: { fontStyle: "italic", color: "#888", marginVertical: 5 },
   emptyText: { textAlign: "center", marginTop: 50, fontSize: 16, color: "#888" },
 });
+ 
