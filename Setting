@@ -171,7 +171,7 @@ CSRF_TRUSTED_ORGINS = [
     "http://localhost:3000",
     "http://localhost:8081",
     "http://127.0.0.1:3000",
-    "http://192.168.68.116:8003",
+    "http://192.168.68.124:8003",
     
 ]    
 
@@ -179,14 +179,15 @@ CSRF_COOKIE_HTTPONLY = False
 
 ALLOWED_HOSTS = [
     "127.0.0.1", 
-    "192.168.68.116",
+    "192.168.68.124",
     "localhost",
     "localhost:8081",
 ]
 
-BACKEND_BASE_URL = "http://192.168.68.116:8003"
+BACKEND_BASE_URL = "http://192.168.68.124:8003"
 
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR ,'servicecenter','media') 
 
+ 
