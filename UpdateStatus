@@ -39,13 +39,9 @@ export default function UpdateStatus() {
         query GetRepair($id:String!){
           repairRequest(requestId:$id){
             requestId
-            title
-            problem
+            itemName
+            problemDescription
             status
-            items {
-              description
-              amount
-            }
           }
         }
       `;
@@ -58,7 +54,8 @@ export default function UpdateStatus() {
         setStatus(String(fresh.status));      
         setRefreshToggle((prev) => !prev);    
 
-    } catch (err) {
+    } 
+  }catch (err) {
       console.log("Failed to fetch updated repair:", err);
     }
   };
