@@ -7,7 +7,7 @@ from reportlab.platypus import Table, TableStyle
 from django.conf import settings
 import os
 
-# Correct font path
+# Register font
 FONT_PATH = os.path.join(
     settings.BASE_DIR,
     'service',
@@ -15,14 +15,7 @@ FONT_PATH = os.path.join(
     'fonts',
     'DejaVuSans.ttf'
 )
-
-# Debug print
-print("FONT PATH:", FONT_PATH)
-print("FILE EXISTS:", os.path.exists(FONT_PATH))
-
-# Register font
 pdfmetrics.registerFont(TTFont('DejaVuSans', FONT_PATH))
-
 
 def create_invoice_pdf(invoice):
     file_name = f"INV-{invoice.repair_request.request_id}.pdf"
@@ -33,21 +26,29 @@ def create_invoice_pdf(invoice):
     width, height = A4
     y = height - 50
 
+    # Title
     p.setFont("DejaVuSans", 20)
-    p.drawCentredString(width/2, y, "INVOICE PREVIEW")
+    p.drawCentredString(width / 2, y, "INVOICE PREVIEW")
 
+    # Invoice info
     p.setFont("DejaVuSans", 12)
     y -= 50
+    p.drawRightString(width - 40, height - 80, f"Invoice Number: {invoice.invoice_number}")
+    p.drawRightString(width - 40, height - 100, f"Generated On: {invoice.generated_on.strftime('%Y-%m-%d')}")
+
+    # Customer info
     info_lines = [
         f"Customer Phone: {invoice.repair_request.contact_info}",
+        f"Customer Name: {invoice.repair_request.customer.name}",
         f"Item: {invoice.repair_request.item_name}",
-        f"Request ID: {invoice.repair_request.request_id}"
+        f"Request ID: {invoice.repair_request.request_id}",
     ]
     for line in info_lines:
         p.drawString(50, y, line)
         y -= 20
-
     y -= 20
+
+    # Items table
     estimation = invoice.repair_request.estimation
     data = [["Description", "Quantity × Price", "Amount"]]
 
@@ -62,30 +63,67 @@ def create_invoice_pdf(invoice):
 
     table = Table(data, colWidths=[300, 100, 100])
     style = TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.black),
-        ('ALIGN', (1,1), (-1,-1), 'CENTER'),
-        ('FONTNAME', (0,0), (-1,0), 'DejaVuSans'),
-        ('FONTNAME', (0,1), (-1,-2), 'DejaVuSans'),
-        ('FONTNAME', (0,-1), (-1,-1), 'DejaVuSans'),
-        ('GRID', (0,0), (-1,-1), 1, colors.black),
-        ('BOTTOMPADDING', (0,0), (-1,0), 8),
-        ('TOPPADDING', (0,0), (-1,0), 8),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+        ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, -1), 'DejaVuSans'),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('TOPPADDING', (0, 0), (-1, 0), 8),
     ])
     table.setStyle(style)
     table.wrapOn(p, width, height)
     table.drawOn(p, 50, y - (20 * len(data)))
 
+
+    signature_path = os.path.join(settings.BASE_DIR, "service", "utils", "image", "authorized_sign.png")
+    seal_path = os.path.join(settings.BASE_DIR, "service", "utils", "image", "seal.png")
+
+    base_y = 60   # distance from bottom
+
+# SEAL (bigger)
+    seal_width = 120
+    seal_height = 120
+    seal_x = 60   # left side
+
+    if os.path.exists(seal_path):
+        p.drawImage(
+        seal_path,
+        seal_x,
+        base_y,
+        width=seal_width,
+        height=seal_height,
+        preserveAspectRatio=True,
+        mask='auto'
+    )
+
+    signature_width = 160
+    signature_height = 80
+    signature_x = width - signature_width - 60   # right side
+
+    if os.path.exists(signature_path):
+        p.drawImage(
+        signature_path,
+        signature_x,
+        base_y + 20,
+        width=signature_width,
+        height=signature_height,
+        preserveAspectRatio=True,
+        mask='auto'
+    )
+
+# TEXT directly below signature
+    p.setFont("DejaVuSans", 10)
+    text_y = base_y - 7   # just below signature area
+    p.drawString(signature_x + 40, text_y, "Authorized Sign")
+
+
     p.showPage()
     p.save()
 
+    # Update invoice URL
     pdf_url = f"{settings.BACKEND_BASE_URL}{settings.MEDIA_URL}invoices/{file_name}"
     invoice.pdf_url = pdf_url
     invoice.save(update_fields=['pdf_url'])
 
     return pdf_url
-
-
-
-
-
