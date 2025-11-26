@@ -5,6 +5,7 @@ import { UserProvider, UserContext } from "./components/ui/UserContext";
 import { setAuthToken } from "./services/api";
 
 import Login from "./app/Login";
+import Signup from "./app/Signup";
 import CreateRepairRequest from "./app/CreateRepairRequest";
 import AddEstimation from "./app/AddEstimation";
 import ViewRequest from "./app/ViewRequest";
@@ -15,6 +16,7 @@ import Invoice from "./app/Invoice";
 
 export type RootStackParamList = {
   Login: undefined;
+  Signup: undefined;
   CreateRepairRequest: undefined;
   AddEstimation: undefined;
   ViewRequest: undefined;
@@ -40,6 +42,11 @@ function AppContent() {
         <Stack.Screen
           name="Login"
           component={Login}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Signup"
+          component={Signup}
           options={{ headerShown: false }}
         />
         <Stack.Screen
@@ -89,4 +96,3 @@ export default function App() {
     </UserProvider>
   );
 }
- 
