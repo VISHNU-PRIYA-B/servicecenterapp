@@ -171,4 +171,3 @@ const styles = StyleSheet.create({
   closeButton: { backgroundColor: "#2D8CFF", paddingVertical: 10, paddingHorizontal: 35, borderRadius: 8 },
   closeButtonText: { color: "white", fontSize: 16 },
 });
- 
