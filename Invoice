@@ -1,6 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useLayoutEffect } from "react";
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet,Linking } from "react-native";
 import { graphqlRequest } from "../services/api";
+import {useLogout} from "../hooks/Logout"
+import {useNavigation} from "@react-navigation/native";
 
 export default function Invoice() {
   const [requestId, setRequestId] = useState("");
@@ -9,6 +11,18 @@ export default function Invoice() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [pdfUrl, setPdfUrl] = useState("");
+  const navigation = useNavigation();
+  const logout = useLogout();
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity onPress={logout} style={{ marginRight: 15 }}>
+          <Text style={{ color: "red", fontWeight: "bold" }}>Logout</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation,logout]);
 
   // Fetch repair + estimation
   const fetchDetails = async () => {
@@ -203,4 +217,3 @@ pdfButtonText: {
 },
 
 });
- 
