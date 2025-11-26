@@ -1,0 +1,31 @@
+import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import 'react-native-reanimated';
+
+import { useColorScheme } from '@/hooks/use-color-scheme';
+
+export const unstable_settings = {
+  anchor: '(tabs)',
+};
+
+export default function RootLayout() {
+  const colorScheme = useColorScheme();
+
+  return (
+    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <Stack>
+        <Stack.Screen name="index" options={{ title: "Login", headerShown: false }} />
+        <Stack.Screen name="Login" options={{ title: 'Login',headerShown: false }} />
+        <Stack.Screen name="Signup" options={{title: "Signup", headerShown:false}}/>
+        <Stack.Screen name="CreateRepairRequest" options={{title: "RepairRequest", headerShown:false}}/>
+        <Stack.Screen name="AddEstimation" options={{title: "Estimation", headerShown: true}}/>
+        <Stack.Screen name='ApproveEstimation' options={{title: "ApproveEstimation", headerShown: true}}/>
+        <Stack.Screen name='ViewRequest' options={{title: "ViewRequest", headerShown: true}}/>
+        <Stack.Screen name='AdminEstimation' options={{title: "AdminEstimation", headerShown: true}}/>
+        <Stack.Screen name='UpdateStatus' options={{title: "UpdateStatus", headerShown: true}}/>
+      </Stack>
+      <StatusBar style="auto" />
+    </ThemeProvider>
+  );
+}
