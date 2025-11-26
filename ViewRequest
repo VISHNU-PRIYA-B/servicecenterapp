@@ -1,3 +1,4 @@
+//@ts-nocheck
 import React, { useEffect, useState, useContext,useCallback } from "react";
 import { View, Text, Button, ScrollView, TouchableOpacity } from "react-native";
 import { graphqlRequest } from "../services/api";
@@ -37,6 +38,12 @@ export default function ViewRequest() {
       loadRequests();
     }, [])
   );
+
+  const handleUpdateFromChild = () =>{
+    setRequests(prev =>
+      prev.map(r => (r.requestId === updatedRepair.requestId ? updatedRepair :r))
+    );
+  };
 
   return (
     <ScrollView style={{ padding: 20 }}>
@@ -87,6 +94,7 @@ export default function ViewRequest() {
             onPress={() =>
               navigation.navigate("AdminEstimation", {
                 requestId: req.requestId,
+                onUpdate: handleUpdateFromChild,
               })
             }
           >
@@ -100,4 +108,3 @@ export default function ViewRequest() {
     </ScrollView>
   );
 }
- 
