@@ -168,22 +168,17 @@ class CreateUser(graphene.Mutation):
     message = graphene.String()
 
     class Arguments:
+        name = graphene.String(required=True)
         email = graphene.String(required=True)
         password = graphene.String(required=True)
-        role = graphene.String(required=True)
 
-    def mutate(self, info, email, password, role):
+    def mutate(self, info, email, password, name):
         if User.objects.filter(email=email).exists():
             return CreateUser(success=False, message="Email already registered")
-
-        role = role.lower()
-        if role == "customer":
-            user = User.objects.create_customeruser(email=email, password=password)
-        elif role == "admin":
-            user = User.objects.create_superuser(email=email, password=password)
-        else:
-            return CreateUser(success=False, message="Invalid role")
-
+        # always signup as customer
+        user = User.objects.create_customeruser(email=email, password=password)
+        user.name = name
+        user.save()
         token = get_token(user)
         return CreateUser(success=True, message="User created successfully", user=user, token=token)
 
@@ -424,4 +419,3 @@ class Mutation(graphene.ObjectType):
 
 
 
- 
