@@ -9,7 +9,6 @@ export const fetchCurrentUser = async(token?:string) =>{
     currentUser{
     id
     email
-    role 
     customer
     admin
     }
@@ -26,11 +25,11 @@ export const fetchCurrentUser = async(token?:string) =>{
 };
 
 // Signup
-export const signupUser = async (email: string, password: string, role: string) => {
+export const signupUser = async (email: string, password: string, name: string) => {
   const SIGNUP_MUTATION = `
-    mutation CreateUser($email: String!, $password: String!, $role: String!) {
-      createUser(email: $email, password: $password, role: $role) {
-        user { id email role }
+    mutation CreateUser($email: String!, $password: String!, $name: String!) {
+      createUser(email: $email, password: $password, name: $name) {
+        user { id email name }
         token
         success
         message
@@ -38,7 +37,7 @@ export const signupUser = async (email: string, password: string, role: string) 
     }
   `;
   try {
-    const data = await graphqlRequest(SIGNUP_MUTATION, { email, password, role });
+    const data = await graphqlRequest(SIGNUP_MUTATION, { email, password, name });
     const result = data?.createUser;
     if (result?.success) return { success: true, token: result.token, user: result.user };
     return { success: false, message: result?.message || "Signup failed" };
@@ -81,4 +80,3 @@ export const loginUser = async (email: string, password: string) => {
 };
 
 
- 
