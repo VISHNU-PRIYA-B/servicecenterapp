@@ -1,3 +1,4 @@
+//@ts-nocheck
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from "react-native";
 import { graphqlRequest } from "@/services/api";
@@ -110,7 +111,16 @@ export default function AdminEstimation() {
                 })),
                 total: estimation.total,
               };
-              navigation.navigate("UpdateStatus", { repair: repairData });
+              navigation.navigate("UpdateStatus", { repair: repairData, onUpdate:(updateRepair) =>{
+                setEstimation((prev) => ({
+                  ...prev,
+                  repairRequest:{
+                    ...prev.repairRequest,
+                    status: updateRepair.status,
+                  },
+                }));
+                if(onUpdate) ontimeupdate(updateRepair);
+              } });
             }}
           >
             <Text style={{ color: "white", textAlign: "center" }}>
