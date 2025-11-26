@@ -297,4 +297,3 @@ const styles = StyleSheet.create({
   noItems: { fontStyle: "italic", color: "#888", marginVertical: 5 },
   emptyText: { textAlign: "center", marginTop: 50, fontSize: 16, color: "#888" },
 });
- 
