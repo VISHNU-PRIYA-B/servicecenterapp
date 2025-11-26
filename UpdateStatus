@@ -1,5 +1,14 @@
+//@ts-nocheck
 import React, { useContext, useState, useCallback } from "react";
-import {View,Text,TouchableOpacity,Modal,StyleSheet,ScrollView,ActivityIndicator,} from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Modal,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+} from "react-native";
 import { graphqlRequest } from "../services/api";
 import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import { UserContext } from "../components/ui/UserContext";
@@ -22,7 +31,6 @@ export default function UpdateStatus() {
   const [status, setStatus] = useState(String(repair?.status || "PENDING"));
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [refreshToggle, setRefreshToggle] = useState(false); 
 
   if (!repair) {
     return (
@@ -42,6 +50,7 @@ export default function UpdateStatus() {
             itemName
             problemDescription
             status
+
           }
         }
       `;
@@ -50,17 +59,15 @@ export default function UpdateStatus() {
       const fresh = res?.data?.repairRequest;
 
       if (fresh) {
-        setRepairData({ ...fresh });        
-        setStatus(String(fresh.status));      
-        setRefreshToggle((prev) => !prev);    
-
-    } 
-  }catch (err) {
+        setRepairData({ ...fresh });
+        setStatus(String(fresh.status));
+      }
+    } catch (err) {
       console.log("Failed to fetch updated repair:", err);
     }
   };
 
-  /**  Run on screen focus */
+  /** Run on screen focus */
   useFocusEffect(
     useCallback(() => {
       loadLatestRepair();
@@ -73,6 +80,10 @@ export default function UpdateStatus() {
   const updateStatus = async (newStatus) => {
     setLoading(true);
 
+    // Optimistic UI update
+    setStatus(newStatus);
+    setRepairData((prev) => ({ ...prev, status: newStatus }));
+
     const MUTATION = `
       mutation UpdateRepairStatus($request_id:String!, $update_status:String!){
         updateRepairStatus(requestId:$request_id, updateStatus:$update_status){
@@ -84,33 +95,42 @@ export default function UpdateStatus() {
     `;
 
     try {
-      await graphqlRequest(MUTATION, {
+      const res = await graphqlRequest(MUTATION, {
         request_id: repair.requestId,
         update_status: newStatus,
       });
 
-      await loadLatestRepair(); 
+      // Ensure UI matches backend response
+      const updatedStatus = res?.data?.updateRepairStatus?.status;
+      if (updatedStatus) {
+        setStatus(updatedStatus);
+        setRepairData((prev) => ({ ...prev, status: updatedStatus }));
+      }
+
       setShowModal(false);
     } catch (err) {
       console.log(err);
       alert("Failed to update status");
+
+      // Revert UI on failure
+      setStatus(repairData.status);
     } finally {
       setLoading(false);
     }
   };
 
-  const totalAmount = (repairData.items || []).reduce((sum, item) => {
-    return sum + Number(item.amount || 0);
-  }, 0);
+  const totalAmount = (repairData.items || []).reduce(
+    (sum, item) => sum + Number(item.amount || 0),
+    0
+  );
 
   return (
     <ScrollView style={styles.container}>
-
-      <Text style={styles.title}>{repairData.title || "N/A"}</Text>
+      <Text style={styles.title}>{repairData.itemName || "N/A"}</Text>
 
       <Text style={styles.problem}>
         <Text style={{ fontWeight: "bold" }}>Problem: </Text>
-        {repairData.problem || "N/A"}
+        {repairData.problemDescription || "N/A"}
       </Text>
 
       <View style={{ marginTop: 20 }}>
@@ -122,8 +142,7 @@ export default function UpdateStatus() {
               styles.progressFill,
               {
                 width:
-                  ((getStatusIndex(status) + 1) / STATUS_FLOW.length) * 100 +
-                  "%",
+                  ((getStatusIndex(status) + 1) / STATUS_FLOW.length) * 100 + "%",
               },
             ]}
           />
@@ -168,7 +187,9 @@ export default function UpdateStatus() {
       {status === "READY_TO_DELIVER" && (
         <TouchableOpacity
           style={[styles.updateButton, { backgroundColor: "green", marginTop: 10 }]}
-          onPress={() => navigation.navigate("Invoice", { requestId: repair.requestId })}
+          onPress={() =>
+            navigation.navigate("Invoice", { requestId: repair.requestId })
+          }
         >
           <Text style={styles.updateButtonText}>Invoice</Text>
         </TouchableOpacity>
@@ -284,4 +305,3 @@ const styles = StyleSheet.create({
 
   cancelText: { textAlign: "center", color: "#fff", fontWeight: "bold" },
 });
- 
