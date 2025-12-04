@@ -10,6 +10,7 @@ from django.utils.crypto import get_random_string
 from decimal import Decimal
 from graphql import GraphQLError
 from django.db.models import Max
+from graphene_file_upload.scalars import Upload
 import graphql_jwt
 from .utils.pdf_generator import create_invoice_pdf
 
@@ -21,17 +22,26 @@ class UserFilter(django_filters.FilterSet):
 
 class UserType(DjangoObjectType):
     role = graphene.String()
+    profilePic = graphene.String()
 
     class Meta:
         model = User
         interfaces = (graphene.relay.Node,)
         filterset_class = UserFilter
+        fields = "__all__"
 
     def resolve_role(self, info):
         if self.customer:
             return "customer"
         elif self.admin:
             return "admin"
+        return None
+    def resolve_profilePic(self,info):
+        try:
+            if self.profile_pic:
+                return info.context.build_absolute_uri(self.profile_pic.url)
+        except:
+            return None
         return None
     
 class CompanyProfileType(DjangoObjectType):
@@ -159,6 +169,14 @@ class Query(graphene.ObjectType):
             return Estimation.objects.get(repair_request__request_id=request_id)
         except Estimation.DoesNotExist:
             return None
+    company_profile = graphene.Field(CompanyProfileType)
+
+    @login_required
+    def resolve_current_user(self,info):
+        user = info.context.user
+        return user
+    def resolve_company_profile(self, info):
+        return CompanyProfile.objects.first()
     
 # Mutations
 class CreateUser(graphene.Mutation):
@@ -204,6 +222,46 @@ class CustomTokenAuth(graphene.Mutation):
 
         token = get_token(user)
         return CustomTokenAuth(success=True, message="Login successful", token=token, user=user)
+    
+class UpdateProfile(graphene.Mutation):
+    user = graphene.Field(UserType)
+    success = graphene.Boolean()
+    message = graphene.String()
+
+    class Arguments:
+        name = graphene.String()
+        contact_info = graphene.String()
+        profile_pic = Upload(required=False)
+
+    @login_required
+    def mutate(self, info, name=None, profile_pic=None, contact_info=None):
+        print("DEBUG - MUTATION CALLED")
+        print("DEBUG - Received file:", profile_pic)
+
+        user = info.context.user
+
+        if profile_pic:
+            print("DEBUG - Assigning file to model...")
+            user.profile_pic = profile_pic
+        else:
+            print("DEBUG - profile_pic is NONE")
+
+        if name:
+            user.name = name
+
+        if contact_info:
+            user.contact_info = contact_info
+
+        user.save()
+        print("DEBUG - User saved")
+        print("DEBUG - Saved path:", user.profile_pic.url if user.profile_pic else None)
+
+        return UpdateProfile(
+            user=user,
+            success=True,
+            message="Profile updated successfully"
+        )
+
     
 class CreateRepairRequest(graphene.Mutation):
     class Arguments:
@@ -380,21 +438,21 @@ class GenerateInvoice(graphene.Mutation):
     
 class CreateCompanyProfile(graphene.Mutation):
     class Arguments:
+        profile_pic = Upload(required=False)
         name = graphene.String(required=True)
         address = graphene.String(required=True)
         phone = graphene.String(required=True)
-        email = graphene.String(required=True)
         
     company_profile = graphene.Field(CompanyProfileType)
 
     @classmethod
     @login_required
-    def mutate(cls, root, info, name, address, phone, email):
+    def mutate(cls, root, info, name, address, phone):
         user = info.context.user
         if not user.admin:
             raise GraphQLError("Only admin can create comapny profile")
         profile = CompanyProfile.objects.create(
-            name=name, address=address, phone=phone, email=email)
+            name=name, address=address, phone=phone)
         return CreateCompanyProfile(company_profile=profile)
 
 # Root schema
@@ -402,6 +460,8 @@ class Mutation(graphene.ObjectType):
     create_user = CreateUser.Field()
     custom_token_auth = CustomTokenAuth.Field()
     create_repair_request = CreateRepairRequest.Field()
+
+    update_profile = UpdateProfile.Field()
     #create_estimation = CreateEstimation.Field()
     add_estimation_item = AddEstimationItem.Field()
     approve_estimation = ApproveEstimation.Field()
