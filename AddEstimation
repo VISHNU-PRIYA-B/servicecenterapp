@@ -6,8 +6,6 @@ import { UserContext } from "../components/ui/UserContext";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import {useLogout} from "../hooks/Logout"
 
-
-
 export default function AddEstimation() {
   const { token } = useContext(UserContext);
   const route = useRoute();
@@ -119,12 +117,14 @@ export default function AddEstimation() {
           <TextInput
             style={[styles.input, { flex: 2 }]}
             placeholder="Description"
+            placeholderTextColor="#000"
             value={description}
             onChangeText={setDescription}
           />
           <TextInput
             style={[styles.input, { flex: 1 }]}
             placeholder="Qty"
+            placeholderTextColor="#000"
             keyboardType="numeric"
             value={quantity}
             onChangeText={setQuantity}
@@ -132,6 +132,7 @@ export default function AddEstimation() {
           <TextInput
             style={[styles.input, { flex: 1 }]}
             placeholder="Price"
+            placeholderTextColor="#000"
             keyboardType="numeric"
             value={unitPrice}
             onChangeText={setUnitPrice}
@@ -194,12 +195,12 @@ const styles = StyleSheet.create({
   summary: { marginTop: 15 },
   totalText: { fontSize: 18, fontWeight: "bold", color: "#000", marginTop: 5 },
   saveButton: {
-    backgroundColor: "#007AFF",
+    backgroundColor: "#3ff7baff",
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: "center",
     marginTop: 20,
   },
-  saveButtonText: { color: "white", fontSize: 17, fontWeight: "600" },
+  saveButtonText: { color: "black", fontSize: 17, fontWeight: "600" },
 });
  
