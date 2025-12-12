@@ -2,6 +2,7 @@
 import React, { createContext, useState, useEffect, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { graphqlRequest, setAuthToken } from "@/services/api";
+import { ActivityIndicator } from "react-native";
 
 interface UserContextType {
   token: string | null;
@@ -34,27 +35,37 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     const loadTokenAndUser = async () => {
       try {
         const savedToken = await AsyncStorage.getItem("token");
+        console.log("SAVED TOKEN:", savedToken);
+
         if (savedToken) {
           setToken(savedToken);
           setAuthToken(savedToken);
 
-          // Fetch current user
+          // Fetch logged-in user from backend
           const response = await graphqlRequest(
-            `{ currentUser { id email role customer admin } }`,
+            `{ currentUser { id email role admin customer } }`,
             {},
             savedToken
           );
 
+          console.log("CURRENT USER RESPONSE:", response);
+
           if (response?.currentUser) {
-            setUser(response.currentUser); // ✅ Correct
-            console.log("Current user object:", response.currentUser);
+            console.log("Loaded user:", response.currentUser);
+            setUser(response.currentUser);
           } else {
+            console.log("Invalid token → removing");
+            await AsyncStorage.removeItem("token");
+            setToken(null);
             setUser(null);
-            console.log("No user returned from backend");
           }
+        } else {
+          console.log("No saved token → user=null");
+          setToken(null);
+          setUser(null);
         }
       } catch (err) {
-        console.error("Failed to load token or user:", err);
+        console.error("Error restoring session:", err);
         await AsyncStorage.removeItem("token");
         setToken(null);
         setUser(null);
@@ -67,6 +78,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
   }, []);
 
   const login = async (tokenValue: string, userData: any) => {
+    console.log("LOGIN SUCCESS, STORING TOKEN & USER");
     setToken(tokenValue);
     setUser(userData);
     setAuthToken(tokenValue);
@@ -74,6 +86,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
   };
 
   const logout = async () => {
+    console.log("LOGGING OUT...");
     setToken(null);
     setUser(null);
     setAuthToken(undefined);
@@ -82,7 +95,11 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
 
   return (
     <UserContext.Provider value={{ token, user, login, logout, setUser, setToken }}>
-      {loading ? null : children}
+      {loading ? (
+        <ActivityIndicator size="large" style={{ marginTop: 40 }} />
+      ) : (
+        children
+      )}
     </UserContext.Provider>
   );
 };
