@@ -1,12 +1,13 @@
-//@ts-nocheck
+// @ts-nocheck
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from "react-native";
+import {View,Text,StyleSheet,ScrollView,ActivityIndicator,TouchableOpacity,} from "react-native";
 import { graphqlRequest } from "@/services/api";
 import { useRoute, useNavigation } from "@react-navigation/native";
+import { UserContext } from "../components/ui/UserContext";
 
 export default function AdminEstimation() {
   const route = useRoute();
-  const { requestId } = route.params || {};   
+  const { requestId } = route.params || {};
   const [estimation, setEstimation] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigation = useNavigation();
@@ -39,128 +40,183 @@ export default function AdminEstimation() {
     `;
 
     try {
-      const response = await graphqlRequest(query, { id: requestId });
-      console.log("Admin estimation:", response);
-
-      setEstimation(response?.adminEstimation || null);
+      const res = await graphqlRequest(query, { id: requestId });
+      setEstimation(res?.adminEstimation || null);
     } catch (err) {
-      console.log("Error fetching estimation:", err);
+      console.log("Fetch error:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) {
+  if (loading)
     return <ActivityIndicator size="large" style={{ marginTop: 50 }} />;
-  }
 
-  if (!estimation) {
+  if (!estimation)
     return (
       <View style={styles.errorBox}>
         <Text>No estimation found</Text>
       </View>
     );
-  }
 
   const request = estimation.repairRequest;
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "READY_TO_DELIVER":
+        return { bg: "#FFF0D5", text: "#C37400" };
+      case "REPAIRING":
+        return { bg: "#D6E9FF", text: "#185ABC" };
+      case "STARTED":
+        return { bg: "#DFF5E1", text: "#2F6B3F" };
+      default:
+        return { bg: "#EEE", text: "#555" };
+    }
+  };
+
+  const statusColor = getStatusColor(request.status);
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.card}>
+        {/* Title */}
         <Text style={styles.title}>{request.itemName}</Text>
 
+        {/* Problem */}
         <Text style={styles.label}>
           Problem: <Text style={styles.value}>{request.problemDescription}</Text>
         </Text>
 
-        <Text style={styles.label}>
-          Status: <Text style={styles.status}>{request.status}</Text>
-        </Text>
+        {/* Status */}
+        <View
+          style={[
+            styles.statusChip,
+            { backgroundColor: statusColor.bg },
+          ]}
+        >
+          <Text style={[styles.statusText, { color: statusColor.text }]}>
+            {request.status}
+          </Text>
+        </View>
 
+        {/* Estimation header */}
         <Text style={styles.sectionTitle}>Estimation</Text>
         <View style={styles.line} />
 
+        {/* Estimation items */}
         {estimation.items.map((item) => (
           <View key={item.id} style={styles.row}>
-            <Text style={styles.itemName}>{item.description}</Text>
+            <View>
+              <Text style={styles.itemName}>{item.description}</Text>
+              <Text style={styles.subText}>
+                {item.quantity} × ₹{item.unitPrice}
+              </Text>
+            </View>
             <Text style={styles.amount}>₹{item.amount}</Text>
           </View>
         ))}
 
+        {/* Total Section */}
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total:</Text>
           <Text style={styles.totalAmount}>₹{estimation.total}</Text>
-          {request.status !== "REJECTED" &&(
+        </View>
+
+        {/* UPDATE STATUS BUTTON */}
+        {request.status !== "REJECTED" && (
           <TouchableOpacity
-            style={{
-              backgroundColor: "blue",
-              padding: 10,
-              marginTop: 10,
-              borderRadius: 8,
-            }}
-            
+            style={styles.updateBtn}
             onPress={() => {
               const repairData = {
-                requestId: requestId,
+                requestId,
                 title: request.itemName,
                 problem: request.problemDescription,
                 status: request.status,
-                items: estimation.items.map((i) => ({
-                  description: i.description,
-                  amount: i.amount,
-                })),
+                items: estimation.items,
                 total: estimation.total,
               };
-              navigation.navigate("UpdateStatus", { repair: repairData, onUpdate:(updateRepair) =>{
-                setEstimation((prev) => ({
-                  ...prev,
-                  repairRequest:{
-                    ...prev.repairRequest,
-                    status: updateRepair.status,
-                  },
-                }));
-                if(onUpdate) ontimeupdate(updateRepair);
-              } });
+
+              navigation.navigate("UpdateStatus", {
+                requestId: requestId,
+              });
             }}
           >
-            <Text style={{ color: "white", textAlign: "center" }}>
-              Update Status
-            </Text>
+            <Text style={styles.updateBtnText}>Update Status</Text>
           </TouchableOpacity>
-          )}
-        </View>
+        )}
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20 },
+  container: {
+    padding: 18,
+    backgroundColor: "#F2F3F7",
+  },
   card: {
     backgroundColor: "#fff",
     padding: 20,
-    borderRadius: 12,
+    borderRadius: 16,
     elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
   },
-  title: { fontSize: 22, fontWeight: "bold", marginBottom: 10 },
+  title: {
+    fontSize: 22,
+    fontWeight: "700",
+    marginBottom: 6,
+  },
   label: { fontSize: 16, marginTop: 4 },
   value: { fontWeight: "600" },
-  status: { fontWeight: "bold", color: "orange" },
-  sectionTitle: { marginTop: 20, fontSize: 18, fontWeight: "bold" },
-  line: { height: 1, backgroundColor: "#ccc", marginVertical: 10 },
-  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8 },
-  itemName: { fontSize: 16 },
-  amount: { fontSize: 16, fontWeight: "600" },
+  statusChip: {
+    alignSelf: "flex-start",
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  statusText: { fontWeight: "700" },
+  sectionTitle: {
+    marginTop: 20,
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  line: {
+    height: 1,
+    backgroundColor: "#ddd",
+    marginVertical: 12,
+  },
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+  },
+  itemName: { fontSize: 16, fontWeight: "600" },
+  subText: { color: "#777", fontSize: 13 },
+  amount: { fontSize: 16, fontWeight: "700" },
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 15,
     borderTopWidth: 1,
-    paddingTop: 10,
     borderColor: "#ccc",
+    paddingTop: 12,
+    marginTop: 12,
   },
-  totalLabel: { fontSize: 18, fontWeight: "bold" },
-  totalAmount: { fontSize: 18, fontWeight: "bold" },
-  errorBox: { marginTop: 50, alignItems: "center" },
-  statusButtonText: { color: "white", fontSize: 17, fontWeight: "600" },
+  totalLabel: { fontSize: 18, fontWeight: "700" },
+  totalAmount: { fontSize: 18, fontWeight: "800" },
+  updateBtn: {
+    backgroundColor: "#3ff7baff",
+    paddingVertical: 14,
+    borderRadius: 10,
+    marginTop: 20,
+  },
+  updateBtnText: {
+    textAlign: "center",
+    fontSize: 17,
+    color: "black",
+    fontWeight: "700",
+  },
+  errorBox: { marginTop: 40, alignItems: "center" },
 });
