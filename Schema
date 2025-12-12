@@ -1,6 +1,8 @@
 import graphene
 import django_filters
 import graphql_jwt.shortcuts 
+import re
+from django.core.exceptions import ValidationError
 from graphql_jwt.shortcuts import get_token
 from graphene_django.types import DjangoObjectType
 from graphql_jwt.decorators import login_required
@@ -13,6 +15,8 @@ from django.db.models import Max
 from graphene_file_upload.scalars import Upload
 import graphql_jwt
 from .utils.pdf_generator import create_invoice_pdf
+import base64
+from django.core.files.base import ContentFile
 
 
 class UserFilter(django_filters.FilterSet):
@@ -49,10 +53,23 @@ class CompanyProfileType(DjangoObjectType):
         model = CompanyProfile
         fields = "__all__"
 
-class RepairRequestType(DjangoObjectType):
-    class Meta:
-        model = RepairRequest
-        fields = "__all__"
+# class RepairRequestType(DjangoObjectType):
+#     estimation = graphene.Field(lambda: EstimationType)
+#     items = graphene.List(EstimationItemType)
+
+#     class Meta:
+#         model = RepairRequest
+#         fields = "__all__"
+
+#     def resolve_estimation(self, info):
+#         return Estimation.objects.filter(repair_request=self).first()
+
+#     def resolve_items(self, info):
+#         estimation = Estimation.objects.filter(repair_request=self).first()
+#         if estimation:
+#             return estimation.items.all()
+#         return []
+
 
 class EstimationType(DjangoObjectType):
     invoice = graphene.Field(lambda: InvoiceType)
@@ -73,6 +90,31 @@ class EstimationItemType(DjangoObjectType):
 
     def resolve_amount(self,info):
         return self.quantity*self.unit_price
+    
+class RepairRequestType(DjangoObjectType):
+    estimation = graphene.Field(lambda: EstimationType)
+    items = graphene.List(EstimationItemType)
+    updates = graphene.List(lambda: UpdaterepairstatusType)
+
+    class Meta:
+        model = RepairRequest
+        fields = "__all__"
+
+    def resolve_estimation(self, info):
+        return Estimation.objects.filter(repair_request=self).first()
+
+    def resolve_items(self, info):
+        estimation = Estimation.objects.filter(repair_request=self).first()
+        if estimation:
+            return estimation.items.all()
+        return []
+
+    def resolve_updates(self, info):
+        # FIXED HERE
+        return Updaterepairstatus.objects.filter(
+            repairrequest=self
+        ).order_by("updated_on")
+
     
 class UpdaterepairstatusType(DjangoObjectType):
     class Meta:
@@ -144,7 +186,6 @@ class Query(graphene.ObjectType):
     def resolve_my_estimations(self,info):
         print("Logged in user",info.context.user)
         return Estimation.objects.filter(repair_request__customer=info.context.user)
-  
 
         # single estimation based on id:
     my_estimation = graphene.Field(EstimationType, estimation_id=graphene.ID(required=True))
@@ -171,10 +212,6 @@ class Query(graphene.ObjectType):
             return None
     company_profile = graphene.Field(CompanyProfileType)
 
-    @login_required
-    def resolve_current_user(self,info):
-        user = info.context.user
-        return user
     def resolve_company_profile(self, info):
         return CompanyProfile.objects.first()
     
@@ -187,19 +224,29 @@ class CreateUser(graphene.Mutation):
 
     class Arguments:
         name = graphene.String(required=True)
+        company_name = graphene.String()
         email = graphene.String(required=True)
         password = graphene.String(required=True)
 
-    def mutate(self, info, email, password, name):
+    def mutate(self, info, email, password, name,company_name):
+                # ❗ Email format validation
+        email_regex = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
+        if not re.match(email_regex, email):
+            return CreateUser(
+                success=False,
+                message="Invalid email format. Example: name@gmail.com",
+                user=None,
+                token=None
+            )
         if User.objects.filter(email=email).exists():
             return CreateUser(success=False, message="Email already registered")
         # always signup as customer
         user = User.objects.create_customeruser(email=email, password=password)
         user.name = name
+        user.company_name = company_name
         user.save()
         token = get_token(user)
         return CreateUser(success=True, message="User created successfully", user=user, token=token)
-
 
 class CustomTokenAuth(graphene.Mutation):
     token = graphene.String()
@@ -231,7 +278,7 @@ class UpdateProfile(graphene.Mutation):
     class Arguments:
         name = graphene.String()
         contact_info = graphene.String()
-        profile_pic = Upload(required=False)
+        profile_pic = graphene.String(required=False)
 
     @login_required
     def mutate(self, info, name=None, profile_pic=None, contact_info=None):
@@ -241,10 +288,17 @@ class UpdateProfile(graphene.Mutation):
         user = info.context.user
 
         if profile_pic:
-            print("DEBUG - Assigning file to model...")
-            user.profile_pic = profile_pic
-        else:
-            print("DEBUG - profile_pic is NONE")
+            try:
+                format,imgstr = profile_pic.split(';base64,')
+                ext = format.split('/')[-1]
+                file_data = ContentFile(base64.b64decode(imgstr),name=f"profile.{ext}")
+                user.profile_pic = file_data
+            except Exception as e:
+                return UpdateProfile(
+                    user = user,
+                    success=False,
+                    message="Invaild base64 image"
+                )
 
         if name:
             user.name = name
@@ -261,7 +315,6 @@ class UpdateProfile(graphene.Mutation):
             success=True,
             message="Profile updated successfully"
         )
-
     
 class CreateRepairRequest(graphene.Mutation):
     class Arguments:
@@ -277,6 +330,9 @@ class CreateRepairRequest(graphene.Mutation):
         print("DEBUG USER:", user.email, user.customer, user.admin)
         if not user.customer:
             raise GraphQLError("Only customer can create repair request")
+        # phone number validation
+        if not re.fullmatch(r"\d{10}", contact_info):
+            raise Exception("Phone number must be 10 digits and contain only numbers.")
         request = RepairRequest.objects.create(
             customer = user,
             item_name=item_name,
@@ -333,7 +389,6 @@ class AddEstimationItem(graphene.Mutation):
         estimation.calculate_totals()
         return AddEstimationItem(item=item)
         
-
 class ApproveEstimation(graphene.Mutation):
     class Arguments:
         request_id = graphene.String(required=True)
@@ -369,6 +424,7 @@ class ApproveEstimation(graphene.Mutation):
 class UpdateRepairStatus(graphene.Mutation):
     class Arguments:
         request_id = graphene.String(required=True)
+        description = graphene.String(required=True)
         update_status = graphene.String(required=True)
 
     success = graphene.Boolean()
@@ -376,27 +432,74 @@ class UpdateRepairStatus(graphene.Mutation):
     status = graphene.String()
 
     @classmethod
-    def mutate(cls, root, info, request_id, update_status):
+    def mutate(cls, root, info, request_id, description, update_status):
         user = info.context.user
-        if not user.admin:
-            raise GraphQLError("Only admin can update repair status")
-        
+
         try:
             repair_request = RepairRequest.objects.get(request_id=request_id)
         except RepairRequest.DoesNotExist:
-            raise GraphQLError("Repair request does not exist")
+            raise GraphQLError("Repair request not found.")
 
+        current = repair_request.status
+
+        # -----------------------------
+        # CUSTOMER CAN ACCEPT OR REJECT
+        # -----------------------------
+        if current == "PENDING":
+            if update_status not in ["ACCEPTED", "REJECTED"]:
+                raise GraphQLError("Customer must ACCEPT or REJECT estimation first.")
+
+            if not user.customer:
+                raise GraphQLError("Only customer can accept or reject estimation.")
+
+            repair_request.status = update_status
+            repair_request.save()
+
+            return UpdateRepairStatus(
+                success=True,
+                message="Status updated successfully.",
+                status=update_status
+            )
+
+        # -----------------------------
+        # CUSTOMER REJECTED → STOP FLOW
+        # -----------------------------
+        if current == "REJECTED":
+            raise GraphQLError("Request was rejected. No further updates allowed.")
+
+        # -----------------------------
+        # ADMIN WORKFLOW (AFTER ACCEPTED)
+        # -----------------------------
+        if not user.admin:
+            raise GraphQLError("Only admin can update status after acceptance.")
+
+        ADMIN_FLOW = {
+            "ACCEPTED": "STARTED",
+            "STARTED": "REPAIRING",
+            "REPAIRING": "TESTING",
+            "TESTING": "READY_TO_DELIVER",
+        }
+
+        expected_next = ADMIN_FLOW.get(current)
+
+        if update_status != expected_next:
+            raise GraphQLError(f"Invalid update. Next status should be {expected_next}.")
+
+        # SAVE ADMIN UPDATE
         repair_request.status = update_status
         repair_request.save()
 
         Updaterepairstatus.objects.create(
             repairrequest=repair_request,
-            update_status=update_status
-        )
-        return UpdateRepairStatus(
-            success=True,message="Status updated successfully", status=update_status
+            update_status=update_status,
+            description=description
         )
 
+        return UpdateRepairStatus(
+            success=True,
+            message="Status updated successfully.",
+            status=update_status
+        )
 
 
 class GenerateInvoice(graphene.Mutation):
@@ -435,25 +538,62 @@ class GenerateInvoice(graphene.Mutation):
         invoice.save()
 
         return GenerateInvoice(invoice=invoice)
-    
-class CreateCompanyProfile(graphene.Mutation):
+class CreateOrUpdateCompanyProfile(graphene.Mutation):
     class Arguments:
         profile_pic = Upload(required=False)
-        name = graphene.String(required=True)
+        owner_name = graphene.String(required=True)
+        company_name = graphene.String(required=True)
         address = graphene.String(required=True)
         phone = graphene.String(required=True)
         
     company_profile = graphene.Field(CompanyProfileType)
+    success = graphene.Boolean()
+    message = graphene.String()
 
     @classmethod
     @login_required
-    def mutate(cls, root, info, name, address, phone):
+    def mutate(cls, root, info, owner_name, company_name, address, phone, profile_pic=None):
         user = info.context.user
+
         if not user.admin:
-            raise GraphQLError("Only admin can create comapny profile")
-        profile = CompanyProfile.objects.create(
-            name=name, address=address, phone=phone)
-        return CreateCompanyProfile(company_profile=profile)
+            raise GraphQLError("Only admin can modify company profile")
+
+        # Fetch the existing company profile (only one allowed)
+        profile = CompanyProfile.objects.first()
+
+        if profile:
+            # UPDATE EXISTING
+            profile.owner_name = owner_name
+            profile.company_name = company_name
+            profile.phone = phone
+            profile.address = address
+
+            if profile_pic:
+                profile.profile_pic = profile_pic
+
+            profile.save()
+
+            return CreateOrUpdateCompanyProfile(
+                company_profile=profile,
+                success=True,
+                message="Company profile updated successfully"
+            )
+
+        else:
+            # CREATE NEW
+            profile = CompanyProfile.objects.create(
+                owner_name=owner_name,
+                company_name=company_name,
+                address=address,
+                phone=phone,
+                profile_pic=profile_pic,
+            )
+
+            return CreateOrUpdateCompanyProfile(
+                company_profile=profile,
+                success=True,
+                message="Company profile created successfully"
+            )
 
 # Root schema
 class Mutation(graphene.ObjectType):
@@ -467,7 +607,7 @@ class Mutation(graphene.ObjectType):
     approve_estimation = ApproveEstimation.Field()
     update_repair_status = UpdateRepairStatus.Field()
     generate_invoice = GenerateInvoice.Field()
-    create_company_profile = CreateCompanyProfile.Field()
+    create_or_update_company_profile = CreateOrUpdateCompanyProfile.Field()
 
     token_auth = graphql_jwt.ObtainJSONWebToken.Field()
     verify_token = graphql_jwt.Verify.Field()
