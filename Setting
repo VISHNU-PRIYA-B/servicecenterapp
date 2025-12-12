@@ -190,3 +190,4 @@ BACKEND_BASE_URL = "http://192.168.68.115:8003"
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR ,'servicecenter','media') 
 
+ 
