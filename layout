@@ -18,12 +18,13 @@ export default function RootLayout() {
         <Stack.Screen name="index" options={{ title: "Login", headerShown: false }} />
         <Stack.Screen name="Login" options={{ title: 'Login',headerShown: false }} />
         <Stack.Screen name="Signup" options={{title: "Signup", headerShown:false}}/>
-        <Stack.Screen name="CreateRepairRequest" options={{title: "RepairRequest", headerShown:false}}/>
+        <Stack.Screen name="CreateRepairRequest" options={{title: "Repair Request", headerShown:true}}/>
         <Stack.Screen name="AddEstimation" options={{title: "Estimation", headerShown: true}}/>
-        <Stack.Screen name='ApproveEstimation' options={{title: "ApproveEstimation", headerShown: true}}/>
-        <Stack.Screen name='ViewRequest' options={{title: "ViewRequest", headerShown: true}}/>
+        <Stack.Screen name='ApproveEstimation' options={{title: "Requests", headerShown: true}}/>
+        <Stack.Screen name='ViewRequest' options={{title: "View Request", headerShown: true}}/>
         <Stack.Screen name='AdminEstimation' options={{title: "AdminEstimation", headerShown: true}}/>
         <Stack.Screen name='UpdateStatus' options={{title: "UpdateStatus", headerShown: true}}/>
+        <Stack.Screen name='Profile' options={{title:"Profile", headerShown: true}}/>
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
