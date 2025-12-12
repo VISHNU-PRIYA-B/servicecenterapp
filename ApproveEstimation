@@ -1,10 +1,20 @@
 import React, { useEffect, useState, useContext, useLayoutEffect } from "react";
-import {View,Text,StyleSheet,FlatList,TouchableOpacity,Alert,ActivityIndicator,Linking,} from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  Linking,
+} from "react-native";
 import { graphqlRequest, setAuthToken } from "../services/api";
 import { UserContext } from "../components/ui/UserContext";
 import { useLogout } from "../hooks/Logout";
 import { useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { BACKEND_BASE_URL } from "../services/api";
 
 export default function ApproveEstimation() {
   const { token: contextToken, user } = useContext(UserContext);
@@ -13,7 +23,7 @@ export default function ApproveEstimation() {
   const logout = useLogout();
   const navigation = useNavigation();
 
-  // Add Logout button
+  // Logout button
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -67,9 +77,7 @@ export default function ApproveEstimation() {
       const response = await graphqlRequest(query, {}, tokenToUse);
 
       const data =
-        response?.data?.myEstimations ||
-        response?.myEstimations ||
-        [];
+        response?.data?.myEstimations || response?.myEstimations || [];
 
       setEstimations(data);
     } catch (err) {
@@ -84,6 +92,7 @@ export default function ApproveEstimation() {
     fetchMyEstimations();
   }, []);
 
+  //  Accept handler
   const handleApprove = async (requestId: string) => {
     if (!requestId) return;
 
@@ -100,11 +109,10 @@ export default function ApproveEstimation() {
       const response = await graphqlRequest(mutation);
 
       const result =
-        response?.approveEstimation ||
-        response?.data?.approveEstimation;
+        response?.approveEstimation || response?.data?.approveEstimation;
 
       if (result?.success) {
-        Alert.alert("Success", "Approved successfully.");
+        Alert.alert("Accepted", "Accepted successfully!");
         fetchMyEstimations();
       } else {
         Alert.alert("Error", result?.message || "Could not approve.");
@@ -115,7 +123,7 @@ export default function ApproveEstimation() {
     }
   };
 
-
+  // ❌ Reject handler
   const handleReject = async (requestId: string) => {
     if (!requestId) return;
 
@@ -132,11 +140,10 @@ export default function ApproveEstimation() {
       const response = await graphqlRequest(mutation);
 
       const result =
-        response?.approveEstimation ||
-        response?.data?.approveEstimation;
+        response?.approveEstimation || response?.data?.approveEstimation;
 
       if (result?.success) {
-        Alert.alert("Rejected", "Estimation rejected successfully.");
+        Alert.alert("Rejected", "Rejected successfully!");
         fetchMyEstimations();
       } else {
         Alert.alert("Error", result?.message || "Could not reject.");
@@ -147,7 +154,7 @@ export default function ApproveEstimation() {
     }
   };
 
-  // Loading View
+  // Loading view
   if (loading) {
     return (
       <View style={styles.center}>
@@ -157,7 +164,7 @@ export default function ApproveEstimation() {
     );
   }
 
-  // Empty View
+  // Empty view
   if (!estimations || estimations.length === 0) {
     return (
       <View style={styles.center}>
@@ -166,7 +173,7 @@ export default function ApproveEstimation() {
     );
   }
 
-  // Render single estimation card
+  // Render card
   const renderItem = ({ item }: any) => {
     const total =
       item.items?.reduce(
@@ -176,7 +183,6 @@ export default function ApproveEstimation() {
 
     const requestId = item.repairRequest?.requestId;
     const status = item.repairRequest?.status?.toLowerCase();
-
     const showButtons = requestId && status === "pending";
 
     return (
@@ -236,13 +242,28 @@ export default function ApproveEstimation() {
           </View>
         )}
 
-        {item.invoice?.pdfUrl && (
-          <TouchableOpacity
-            onPress={() => Linking.openURL(item.invoice.pdfUrl)}
-          >
-            <Text style={{ color: "blue", marginTop: 10 }}>View Invoice</Text>
-          </TouchableOpacity>
-        )}
+{item.invoice?.pdfUrl && (
+  <TouchableOpacity
+    onPress={() => {
+      const pdfPath = item.invoice.pdfUrl;
+
+      // Convert relative → full URL
+      const fullUrl = pdfPath.startsWith("http")
+        ? pdfPath
+        : `${BACKEND_BASE_URL}${pdfPath}`;
+
+      console.log("Opening PDF:", fullUrl);
+
+      Linking.openURL(fullUrl).catch(err => {
+        console.error("Error opening PDF:", err);
+        Alert.alert("Error", "Unable to open invoice PDF.");
+      });
+    }}
+  >
+    <Text style={{ color: "blue", marginTop: 10 }}>View Invoice</Text>
+  </TouchableOpacity>
+)}
+
       </View>
     );
   };
