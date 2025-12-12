@@ -9,6 +9,10 @@ export const fetchCurrentUser = async(token?:string) =>{
     currentUser{
     id
     email
+    
+    companyName
+    name
+    profilePic
     customer
     admin
     }
@@ -25,11 +29,20 @@ export const fetchCurrentUser = async(token?:string) =>{
 };
 
 // Signup
-export const signupUser = async (email: string, password: string, name: string) => {
+export const signupUser = async (email: string, password: string, name: string, companyName:string) => {
+    // ✅ Email validation here
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  if (!emailRegex.test(email)) {
+    return {
+      success: false,
+      message: "Invalid email format. Example: name@gmail.com",
+    };
+  }
   const SIGNUP_MUTATION = `
-    mutation CreateUser($email: String!, $password: String!, $name: String!) {
-      createUser(email: $email, password: $password, name: $name) {
-        user { id email name }
+    mutation CreateUser($email: String!, $password: String!, $name: String!,$companyName:String!) {
+      createUser(email: $email, password: $password, name: $name,companyName:$companyName) {
+        user { id email name companyName}
         token
         success
         message
@@ -37,7 +50,7 @@ export const signupUser = async (email: string, password: string, name: string) 
     }
   `;
   try {
-    const data = await graphqlRequest(SIGNUP_MUTATION, { email, password, name });
+    const data = await graphqlRequest(SIGNUP_MUTATION, { email, password, name,companyName });
     const result = data?.createUser;
     if (result?.success) return { success: true, token: result.token, user: result.user };
     return { success: false, message: result?.message || "Signup failed" };
@@ -65,6 +78,9 @@ export const loginUser = async (email: string, password: string) => {
   `;
   try {
     const data = await graphqlRequest(LOGIN_MUTATION, { email, password });
+    if (!data?.customTokenAuth) {
+      throw new Error("ACCOUNT_NOT_FOUND"); // special message
+    }
     const token = data?.customTokenAuth?.token;
     const user = data?.customTokenAuth?.user;
     if (!token || !user) {
@@ -74,8 +90,13 @@ export const loginUser = async (email: string, password: string) => {
     await AsyncStorage.setItem("token", token);
     return {token, user };
   } catch (error:any) {
-    console.error("Login error:", error);
-    throw new Error(error.message || "Login Failed");
+    if(error.message === "ACCOUNT_NOT_FOUND"){
+      throw new Error("Accountt doesn't exist.Please sign up");
+    }
+    if (error.message === "INVALID_CREDENTIALS") {
+      throw new Error("Invalid email or password");
+    }
+    throw new Error("Account doesn't exist.Please sign up");
   }
 };
 
