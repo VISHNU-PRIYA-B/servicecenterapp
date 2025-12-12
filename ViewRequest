@@ -1,15 +1,16 @@
-//@ts-nocheck
-import React, { useEffect, useState, useContext,useCallback } from "react";
-import { View, Text, Button, ScrollView, TouchableOpacity } from "react-native";
+// @ts-nocheck
+import React, { useEffect, useState, useContext, useCallback } from "react";
+import { View, Text, ScrollView, TouchableOpacity } from "react-native";
 import { graphqlRequest } from "../services/api";
 import { UserContext } from "../components/ui/UserContext";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 
 export default function ViewRequest() {
   const { token } = useContext(UserContext);
-  const navigation = useNavigation();  
+  const navigation = useNavigation();
   const [requests, setRequests] = useState([]);
 
+  // Load all requests
   const loadRequests = async () => {
     const query = `
       query {
@@ -18,91 +19,205 @@ export default function ViewRequest() {
           itemName
           problemDescription
           contactInfo
+          createdAt
           status
         }
       }
     `;
-    const res = await graphqlRequest(query);
-    console.log("Loaded Requests:", res);
 
-    setRequests((res?.allRequests || res?.data?.allRequests || []).filter(r=>r));
+    const res = await graphqlRequest(query, {}, token);
+
+    setRequests(
+      (res?.data?.allRequests || res?.allRequests || []).filter((r) => r)
+    );
   };
 
+  // Load once on mount
   useEffect(() => {
     loadRequests();
   }, []);
 
-    //  Runs every time screen becomes visible again
+  // Load whenever screen comes into focus
   useFocusEffect(
     useCallback(() => {
       loadRequests();
     }, [])
   );
 
-  const handleUpdateFromChild = () =>{
-    setRequests(prev =>
-      prev.map(r => (r.requestId === updatedRepair.requestId ? updatedRepair :r))
-    );
+  // Group by date
+  const groupedData = requests.reduce((acc, item) => {
+    const date = new Date(item.createdAt).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+
+    if (!acc[date]) acc[date] = [];
+    acc[date].push(item);
+    return acc;
+  }, {});
+
+  // Badge colors
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "PENDING":
+        return { bg: "#FFF4CC", text: "#8A6D1F" };
+      case "STARTED":
+        return { bg: "#DFF5E1", text: "#2A6B3A" };
+      case "REPAIRING":
+        return { bg: "#CCE4FF", text: "#1A4F8A" };
+      case "READY_TO_DELIVER":
+        return { bg: "#e2d9f8ff", text: "#5A3FA3" };
+      case "ACCEPTED":
+        return { bg: "#b3e3bbff", text: "#41755cff" };
+      case "REJECTED":
+        return { bg: "#f4b8c3ff", text: "#d71a1aff" };
+      case "TESTING":
+        return { bg: "#a8ebf2ff", text: "#17a9acff" };
+      default:
+        return { bg: "#EEE", text: "#555" };
+    }
   };
 
   return (
-    <ScrollView style={{ padding: 20 }}>
-      <Text style={{ fontSize: 22, fontWeight: "bold", marginBottom: 10 }}>
-        Repair Requests
-      </Text>
-
-      {requests.map((req, index) => (
-        <View
-          key={index}
-          style={{
-            padding: 15,
-            borderWidth: 1,
-            borderRadius: 10,
-            marginVertical: 10,
-          }}
-        >
-          <Text>Request ID: {req.requestId}</Text>
-          <Text>Item: {req.itemName}</Text>
-          <Text>Problem: {req.problemDescription}</Text>
-          <Text>Contact: {req.contactInfo}</Text>
-          <Text>Status: {req.status}</Text>
-
-          <TouchableOpacity
+    <ScrollView style={{ padding: 16, backgroundColor: "#F2F3F8", flex: 1 }}>
+      {Object.keys(groupedData).map((date) => (
+        <View key={date} style={{ marginBottom: 25 }}>
+          {/* DATE HEADER */}
+          <View
             style={{
-              backgroundColor: "blue",
-              padding: 10,
-              marginTop: 10,
-              borderRadius: 8,
+              backgroundColor: "#DDE5FF",
+              alignSelf: "flex-start",
+              paddingVertical: 6,
+              paddingHorizontal: 14,
+              borderRadius: 20,
+              marginBottom: 10,
             }}
-            onPress={() =>
-              navigation.navigate("AddEstimation", {
-                requestId: req.requestId,
-              })
-            }
           >
-            <Text style={{ color: "white", textAlign: "center" }}>
-              Add Estimation
+            <Text style={{ fontSize: 15, fontWeight: "bold", color: "#3A4DA3" }}>
+              {date}
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={{
-              backgroundColor: "blue",
-              padding: 10,
-              marginTop: 10,
-              borderRadius: 8,
-            }}
-            onPress={() =>
-              navigation.navigate("AdminEstimation", {
-                requestId: req.requestId,
-                onUpdate: handleUpdateFromChild,
-              })
-            }
-          >
-            <Text style={{ color: "white", textAlign: "center" }}>
-              View Estimation
-            </Text>
-          </TouchableOpacity>
-          
+          </View>
+
+          {/* REQUEST LIST FOR THIS DATE */}
+          {groupedData[date].map((req, index) => {
+            const colors = getStatusColor(req.status);
+
+            return (
+              <View
+                key={index}
+                style={{
+                  backgroundColor: "#fff",
+                  borderRadius: 14,
+                  padding: 18,
+                  marginVertical: 8,
+                  shadowColor: "#000",
+                  shadowOpacity: 0.08,
+                  shadowRadius: 6,
+                  elevation: 3,
+                }}
+              >
+                {/* ITEM NAME */}
+                <Text style={{ fontSize: 17, fontWeight: "700", color: "#222" }}>
+                  {req.itemName}
+                </Text>
+
+                {/* REQUEST ID */}
+                <Text style={{ color: "#444", marginTop: 6 }}>
+                  Request ID: {req.requestId}
+                </Text>
+
+                {/* PROBLEM */}
+                <Text style={{ color: "#555", marginTop: 4 }}>
+                  Problem: {req.problemDescription}
+                </Text>
+
+                {/* CONTACT */}
+                <Text style={{ color: "#555", marginTop: 4 }}>
+                  Contact: {req.contactInfo}
+                </Text>
+
+                {/* STATUS BADGE */}
+                <View
+                  style={{
+                    alignSelf: "flex-start",
+                    backgroundColor: colors.bg,
+                    paddingVertical: 5,
+                    paddingHorizontal: 12,
+                    borderRadius: 12,
+                    marginTop: 10,
+                  }}
+                >
+                  <Text style={{ color: colors.text, fontWeight: "600" }}>
+                    {req.status}
+                  </Text>
+                </View>
+
+                {/* BUTTONS */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    marginTop: 15,
+                    justifyContent: "space-between",
+                  }}
+                >
+                  {/* ADD ESTIMATION BUTTON */}
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      backgroundColor: "#3ff7baff",
+                      paddingVertical: 12,
+                      borderRadius: 10,
+                      marginRight: 8,
+                    }}
+                    onPress={() =>
+                      navigation.navigate("AddEstimation", {
+                        requestId: req.requestId,
+                      })
+                    }
+                  >
+                    <Text
+                      style={{
+                        textAlign: "center",
+                        color: "black",
+                        fontWeight: "700",
+                      }}
+                    >
+                      Add Estimation
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* VIEW ESTIMATION BUTTON */}
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      borderWidth: 2,
+                      borderColor: "#3ff7b7ff",
+                      backgroundColor: "#3ff7baff",
+                      paddingVertical: 12,
+                      borderRadius: 10,
+                      marginLeft: 8,
+                    }}
+                    onPress={() =>
+                      navigation.navigate("AdminEstimation", {
+                        requestId: req.requestId,
+                      })
+                    }
+                  >
+                    <Text
+                      style={{
+                        textAlign: "center",
+                        color: "black",
+                        fontWeight: "700",
+                      }}
+                    >
+                      View Estimation
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })}
         </View>
       ))}
     </ScrollView>
