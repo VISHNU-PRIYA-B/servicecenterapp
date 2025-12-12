@@ -26,6 +26,8 @@ class UserManager(BaseUserManager):
 # Custom User Model
 class User(AbstractBaseUser, PermissionsMixin):
     name = models.CharField(max_length=200, blank=True)
+    profile_pic = models.ImageField(upload_to="profile_pics/",blank=True,null=True)
+    company_name = models.CharField(max_length=200, blank=True)
     email = models.EmailField(unique=True)
     active = models.BooleanField(default=True)
     customer = models.BooleanField(default=False)
@@ -48,10 +50,11 @@ class User(AbstractBaseUser, PermissionsMixin):
         return self.admin
     
 class CompanyProfile(models.Model):
-    name = models.CharField(max_length=200)
+    owner_name = models.CharField(max_length=200)
+    profile_pic = models.ImageField(upload_to="profile_pics/",blank=True,null=True)
+    company_name = models.CharField(max_length=200)
     address= models.TextField()
-    phone = models.CharField(max_length=20)
-    email = models.EmailField()
+    phone = models.CharField(max_length=15)
 
     def __str__(self):
         return self.name
@@ -125,22 +128,24 @@ class EstimationFilter(django_filters.FilterSet):
 
 class Updaterepairstatus(models.Model):
    UPDATE_STATUS_CHOICE=[
+        ('PENDING','PENDING'),
         ('STARTED','STARTED'),
-        ('REPAIRING','REPAIRRING'),
+        ('REPAIRING','REPAIRING'),
         ('TESTING','TESTING'),
-        ('READY TO DELIVER','READY TO DELIVER'),
+        ('READY_TO_DELIVER','READY_TO_DELIVER'),
+        ('ACCEPTED', 'ACCEPTED'),    
+        ('REJECTED', 'REJECTED'), 
        
    ]
-   amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-   update_status = models.CharField(max_length=50, choices=UPDATE_STATUS_CHOICE, default="PENDING")
-   repairrequest = models.ForeignKey(RepairRequest, on_delete=models.CASCADE)
-   quantity = models.PositiveIntegerField(default=1)
-   unit_price = models.DecimalField(decimal_places=2, max_digits=10, default=0)
+  
+   update_status = models.CharField(max_length=50, choices=UPDATE_STATUS_CHOICE)
+   repairrequest = models.ForeignKey(RepairRequest, on_delete=models.CASCADE,related_name="updates")
+   description = models.CharField(max_length=100)
+   updated_on = models.DateField(auto_now_add=True)
+   class Meta:
+       ordering = ["updated_on","id"]
 
-   def update_amount(self):
-       self.amount = self.unit_price * self.quantity
-       self.save()
-       return self.amount
+
 
 
 class Invoice(models.Model):
