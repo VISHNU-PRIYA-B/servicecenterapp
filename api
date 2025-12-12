@@ -1,7 +1,9 @@
 // services/api.ts
 import axios from "axios";
 
-const API_URL = "http://192.168.68.117:8003/graphql/";
+const API_URL = "http://192.168.68.115:8003/graphql/";
+export const BACKEND_BASE_URL = "http://192.168.68.115:8003";
+
 
 const axiosInstance = axios.create({
   baseURL: API_URL,
@@ -33,9 +35,11 @@ export const graphqlRequest = async (query: string, variables: object = {}, toke
     }
     return response.data.data;
   } catch (error: any) {
-    console.error("GraphQL Request Error:", error.response?.data || error.message);
+    console.log("RAW ERROR OBJECT:", error);
+    console.log("SERVER RESPONSE:", error.response?.data);
     throw error;
   }
 };
 
 export default axiosInstance;
+ 
