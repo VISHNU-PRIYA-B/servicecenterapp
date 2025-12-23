@@ -1,0 +1,423 @@
+// @ts-nocheck
+import React, {
+  useEffect,
+  useState,
+  useLayoutEffect,
+  useContext,
+  useCallback,
+} from "react";
+import {
+  View,
+  Text,
+  Image,
+  StyleSheet,
+  ActivityIndicator,
+  TouchableOpacity,
+  ScrollView,
+  TextInput,
+  Alert,
+} from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import { Menu } from "react-native-paper";
+import { graphqlRequest } from "../services/api";
+import { useLogout } from "../hooks/Logout";
+import {
+  useNavigation,
+  useFocusEffect,
+} from "@react-navigation/native";
+import { UserContext } from "../components/ui/UserContext";
+
+/* ================= GRAPHQL ================= */
+
+const QUERY = `
+  query {
+    currentUser {
+      id
+      name
+      companyName
+      profilePic
+      admin
+      customer
+    }
+    companyProfile {
+      ownerName
+      companyName
+      phone
+      address
+    }
+  }
+`;
+
+const UPDATE_PROFILE_PIC = `
+  mutation UpdateProfilePic($profilePic: String!) {
+    updateProfile(profilePic: $profilePic) {
+      success
+      message
+      user {
+        id
+        profilePic
+      }
+    }
+  }
+`;
+
+const SAVE_COMPANY = `
+  mutation SaveCompany(
+    $ownerName: String!
+    $companyName: String!
+    $phone: String!
+    $address: String!
+  ) {
+    createOrUpdateCompanyProfile(
+      ownerName: $ownerName
+      companyName: $companyName
+      phone: $phone
+      address: $address
+    ) {
+      success
+      message
+      companyProfile {
+        ownerName
+        companyName
+        phone
+        address
+      }
+    }
+  }
+`;
+
+/* ================= COMPONENT ================= */
+
+export default function Profile() {
+  const { token } = useContext(UserContext);
+  const navigation = useNavigation();
+  const logout = useLogout();
+
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+
+  const [data, setData] = useState(null);
+  const [profilePic, setProfilePic] = useState("");
+
+  const [ownerName, setOwnerName] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+
+  /* ================= RESET MENU ON SCREEN CHANGE ================= */
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        setMenuVisible(false);
+      };
+    }, [])
+  );
+
+  /* ================= LOAD PROFILE ================= */
+
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      const res = await graphqlRequest(QUERY, {}, token);
+      setData(res);
+
+      setProfilePic(res.currentUser?.profilePic || "");
+      setOwnerName(res.currentUser?.name || "");
+      setCompanyName(res.currentUser?.companyName || "");
+
+      if (res.companyProfile) {
+        setPhone(res.companyProfile.phone || "");
+        setAddress(res.companyProfile.address || "");
+      }
+    } catch (e) {
+      console.log(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const companyProfile = data?.companyProfile;
+  const isAdmin = data?.currentUser?.admin;
+
+  /* ================= HEADER MENU ================= */
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: "Profile",
+      headerRight: () => (
+        <Menu
+          visible={menuVisible}
+          onDismiss={() => setMenuVisible(false)}
+          anchor={
+            <TouchableOpacity
+              onPress={() => setMenuVisible(v => !v)}
+            >
+              <Image
+                source={require("../assets/images/menu-icon.png")}
+                style={{ width: 26, height: 26, marginRight: 15 }}
+              />
+            </TouchableOpacity>
+          }
+        >
+          <Menu.Item
+            title={companyProfile ? "Edit Company Info" : "Create Company Info"}
+            onPress={() => {
+              setMenuVisible(false);
+              setEditMode(true);
+            }}
+          />
+          <Menu.Item
+            title="Logout"
+            titleStyle={{ color: "red" }}
+            onPress={() => {
+              setMenuVisible(false);
+              logout();
+            }}
+          />
+        </Menu>
+      ),
+    });
+  }, [menuVisible, companyProfile]);
+
+  /* ================= IMAGE PICK + UPLOAD ================= */
+
+  const pickImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission required");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      quality: 0.8,
+      base64: true,
+    });
+
+    if (!result.canceled) {
+      const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+
+      try {
+        setUploading(true);
+        const res = await graphqlRequest(
+          UPDATE_PROFILE_PIC,
+          { profilePic: base64Image },
+          token
+        );
+
+        if (res.updateProfile.success) {
+          setProfilePic(res.updateProfile.user.profilePic);
+          Alert.alert("Success", "Profile picture updated");
+        } else {
+          Alert.alert("Error", res.updateProfile.message);
+        }
+      } catch {
+        Alert.alert("Error", "Failed to upload image");
+      } finally {
+        setUploading(false);
+      }
+    }
+  };
+
+  /* ================= SAVE COMPANY ================= */
+
+  const saveCompany = async () => {
+    if (!ownerName || !companyName || !phone || !address) {
+      Alert.alert("All fields required");
+      return;
+    }
+
+    try {
+      const res = await graphqlRequest(
+        SAVE_COMPANY,
+        { ownerName, companyName, phone, address },
+        token
+      );
+
+      if (res.createOrUpdateCompanyProfile.success) {
+        Alert.alert("Success", "Company details saved");
+        setEditMode(false);
+        loadProfile();
+      } else {
+        Alert.alert("Error", res.createOrUpdateCompanyProfile.message);
+      }
+    } catch {
+      Alert.alert("Error", "Failed to save company details");
+    }
+  };
+
+  /* ================= LOADING ================= */
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  /* ================= UI ================= */
+
+  return (
+    <View style={{ flex: 1 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
+        <View style={styles.headerBackground} />
+
+        <View style={styles.card}>
+          <TouchableOpacity onPress={pickImage}>
+            <Image
+              source={
+                profilePic
+                  ? { uri: profilePic }
+                  : require("../assets/images/default-avatar.png")
+              }
+              style={styles.avatar}
+            />
+            {uploading && <ActivityIndicator style={{ marginTop: 10 }} />}
+          </TouchableOpacity>
+
+          <Text style={styles.tapText}>Tap to change profile picture</Text>
+
+          {isAdmin && !editMode && (
+            <View style={{ marginTop: 20, alignItems: "center" }}>
+              <Text style={styles.ownerName}>{ownerName}</Text>
+              <Text style={styles.companyName}>{companyName}</Text>
+              {!!phone && <Text>{phone}</Text>}
+              {!!address && <Text>{address}</Text>}
+            </View>
+          )}
+
+          {isAdmin && editMode && (
+            <View style={{ width: "100%", marginTop: 20 }}>
+              <TextInput style={styles.input} placeholder="Owner Name" value={ownerName} onChangeText={setOwnerName} />
+              <TextInput style={styles.input} placeholder="Company Name" value={companyName} onChangeText={setCompanyName} />
+              <TextInput style={styles.input} placeholder="Phone" value={phone} onChangeText={setPhone} />
+              <TextInput style={styles.input} placeholder="Address" value={address} onChangeText={setAddress} />
+
+              <TouchableOpacity style={styles.saveBtn} onPress={saveCompany}>
+                <Text style={{ color: "#fff" }}>Save</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditMode(false)}>
+                <Text style={{ color: "#fff" }}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+
+      {/* ===== BOTTOM ACTION BAR ===== */}
+      <View style={styles.bottomBar}>
+        <TouchableOpacity style={styles.bottomBtn} onPress={() => navigation.navigate("CreateRepairRequest")}>
+          <Text style={styles.bottomIcon}>➕</Text>
+          <Text style={styles.bottomText}>Create</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.bottomBtn} onPress={() => navigation.navigate("ViewRequest")}>
+          <Text style={styles.bottomIcon}>📋</Text>
+          <Text style={styles.bottomText}>View</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.bottomBtn} onPress={() => navigation.navigate("ApproveEstimation")}>
+          <Text style={styles.bottomIcon}>✅</Text>
+          <Text style={styles.bottomText}>Approve</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+/* ================= STYLES ================= */
+
+const styles = StyleSheet.create({
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+
+  headerBackground: {
+    height: 140,
+    backgroundColor: "#20dfb6",
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+  },
+
+  card: {
+    backgroundColor: "#fff",
+    marginHorizontal: 20,
+    marginTop: -70,
+    borderRadius: 20,
+    padding: 20,
+    alignItems: "center",
+    elevation: 5,
+  },
+
+  avatar: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 3,
+    borderColor: "#007bff",
+  },
+
+  tapText: { color: "#007bff", marginTop: 8 },
+
+  ownerName: { fontSize: 18, fontWeight: "700" },
+  companyName: { fontSize: 16, fontWeight: "600" },
+
+  input: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+
+  saveBtn: {
+    backgroundColor: "#20dfb6",
+    padding: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+
+  cancelBtn: {
+    backgroundColor: "#9CA3AF",
+    padding: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 8,
+  },
+
+  bottomBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 70,
+    flexDirection: "row",
+    backgroundColor: "#ede7e7ff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    elevation: 15,
+  },
+
+  bottomBtn: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  bottomIcon: {
+    fontSize: 20,
+    marginBottom: 4,
+  },
+
+  bottomText: {
+    color: "#38BDF8",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+});
